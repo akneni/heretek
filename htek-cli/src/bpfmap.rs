@@ -1,7 +1,7 @@
-use std::{error::Error, slice};
 use std::io;
 use std::mem::size_of;
 use std::path::Path;
+use std::{error::Error, slice};
 
 use anyhow::{Result, bail};
 use aya::{
@@ -35,11 +35,9 @@ unsafe impl Pod for EventSlot {}
 impl CEvent {
     unsafe fn from_bytes(bytes: &[u8]) -> &Self {
         let sptr = bytes.as_ptr() as *const Self;
-        unsafe {
-            sptr.as_ref().unwrap()
-        }
+        unsafe { sptr.as_ref().unwrap() }
     }
-    
+
     pub fn fpath_str(&self, x: usize) -> Result<String> {
         let fp_ref = match x {
             1 => &self.fpath1,
@@ -47,13 +45,10 @@ impl CEvent {
             _ => bail!("Bad argument"),
         };
         let idx = fp_ref.iter().position(|&i| i == 0).unwrap_or(256);
-        let sl = unsafe {
-            slice::from_raw_parts(fp_ref.as_ptr() as *const u8, idx)
-        };
+        let sl = unsafe { slice::from_raw_parts(fp_ref.as_ptr() as *const u8, idx) };
         Ok(String::from_utf8(sl.to_vec())?)
     }
 }
-
 
 pub struct BpfEventArrayReader {
     map: PerCpuArray<MapData, EventSlot>,
@@ -94,9 +89,7 @@ impl BpfEventArrayReader {
             while self.tails[cpu] < head {
                 let slot_idx = (self.tails[cpu] % EVENT_BUFFER_SLOTS) as u32;
                 let cpu_slots = self.map.get(&slot_idx, 0)?;
-                let c_event = unsafe {
-                    CEvent::from_bytes(&cpu_slots[cpu].bytes)
-                };
+                let c_event = unsafe { CEvent::from_bytes(&cpu_slots[cpu].bytes) };
 
                 match Event::from(c_event) {
                     Ok(r) => events.push((c_event.pid, r)),
