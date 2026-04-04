@@ -1,0 +1,13 @@
+[workspace]
+authors = ["Anish Kanthamneni <akneni@gmail.com>"]
+channels = ["conda-forge"]
+name = "htek-ebpf"
+platforms = ["linux-64"]
+version = "0.1.0"
+
+[tasks]
+build = { cmd = "bash utils/build.sh", inputs = ["src/*.c", "if/*.h", "utils/build.sh"], outputs = ["build/heretek.ebpf.o"] }
+load = { cmd = "bash utils/load.sh", depends-on = ["unload", "build"] }
+unload = { cmd = "bash utils/unload.sh" }
+
+[dependencies]
