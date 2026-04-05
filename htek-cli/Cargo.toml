@@ -6,4 +6,6 @@ edition = "2024"
 [dependencies]
 anyhow = "1.0.102"
 aya = "0.13.1"
+directories = "6.0.0"
 libc = "0.2.184"
+whoami = "2.1.1"

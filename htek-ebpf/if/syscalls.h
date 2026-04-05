@@ -379,5 +379,6 @@
 #define SYSCALL_REMOVEXATTRAT 466
 #define SYSCALL_OPEN_TREE_ATTR 467
 
-
-
+// Generic Event
+#define GENE_START 1000
+#define GENE_EXIT 1001

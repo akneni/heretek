@@ -13,7 +13,6 @@ use crate::actor::Event;
 
 const EVENT_BUFFER_SLOTS: u64 = 64;
 const EVENT_METADATA_SLOT: u32 = EVENT_BUFFER_SLOTS as u32;
-const SYSCALL_OPENAT: u32 = 257;
 
 #[repr(C)]
 #[derive(Clone, Copy)]
@@ -22,6 +21,7 @@ pub struct CEvent {
     pub pid: i32,
     pub fpath1: [libc::c_char; 256],
     pub fpath2: [libc::c_char; 256],
+    pub spare: [u8; 8],
 }
 
 #[repr(C)]
