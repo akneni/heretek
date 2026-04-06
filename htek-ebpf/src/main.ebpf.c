@@ -114,7 +114,6 @@ static __always_inline void bit_clear(__u8 *bitmap, __u8 idx) {
 }
 
 
-
 static __always_inline const char *tracepoint_dyn_str(const void *ctx, __u32 data_loc) {
     return (const char *)ctx + (data_loc & 0xFFFF);
 }
@@ -130,7 +129,6 @@ int handle_openat(struct trace_event_raw_sys_enter *ctx) {
         return 0;
     }
 
-    __builtin_memset(evt, 0, sizeof(*evt));
     evt->event = SYSCALL_OPENAT;
     evt->pid = (__s32)(bpf_get_current_pid_tgid() >> 32);
     if (filename != 0) {
@@ -154,7 +152,6 @@ int handle_process_fork(struct trace_event_raw_sched_process_fork *ctx) {
         return 0;
     }
 
-    __builtin_memset(evt, 0, sizeof(*evt));
     evt->event = GENE_START;
     evt->pid = ctx->child_pid;
     *(__s32 *)evt->spare = ctx->parent_pid;
@@ -170,7 +167,6 @@ int handle_process_exec(struct trace_event_raw_sched_process_exec *ctx) {
         return 0;
     }
 
-    __builtin_memset(evt, 0, sizeof(*evt));
     evt->event = SYSCALL_EXECVE;
     evt->pid = ctx->pid;
     filename = tracepoint_dyn_str(ctx, ctx->__data_loc_filename);
@@ -186,7 +182,6 @@ int handle_process_exit(struct trace_event_raw_sched_process_template *ctx) {
         return 0;
     }
 
-    __builtin_memset(evt, 0, sizeof(*evt));
     evt->event = GENE_EXIT;
     evt->pid = ctx->pid;
     return 0;

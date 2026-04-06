@@ -1,15 +1,16 @@
 use std::{
-    collections::{HashMap, VecDeque}, fs, mem
+    collections::{HashMap, VecDeque},
+    fs, mem,
 };
 
 use anyhow::{Result, bail};
 
 use crate::{
     bpfmap::CEvent,
+    config::Config,
     event_types,
     utils::{TotalMem, bit_test},
 };
-
 
 #[derive(Debug, Clone, Copy)]
 pub enum ActorState {
@@ -26,12 +27,25 @@ pub struct AccessType {
 
 #[derive(Debug, Clone)]
 pub enum Event {
-    Execve { binary: String },
-    Openat { fpath: String, mode: AccessType },
-    Mmap { fpath: Option<String>, mode: AccessType },
-    Rename { src: String, dst: String },
+    Execve {
+        binary: String,
+    },
+    Openat {
+        fpath: String,
+        mode: AccessType,
+    },
+    Mmap {
+        fpath: Option<String>,
+        mode: AccessType,
+    },
+    Rename {
+        src: String,
+        dst: String,
+    },
     Exit,
-    Start {creator_pid: i32},
+    Start {
+        creator_pid: i32,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -48,6 +62,7 @@ pub struct Actor {
 #[derive(Debug)]
 pub struct ActorsDb {
     pub db: HashMap<i32, VecDeque<Actor>>,
+    pub cfg: Config,
 }
 
 impl AccessType {
@@ -100,8 +115,11 @@ impl TotalMem for Event {
                 size += src.len();
                 size += dst.len();
             }
-            Self::Exit => {},
-            Self::Start { #[allow(unused)] creator_pid } => {},
+            Self::Exit => {}
+            Self::Start {
+                #[allow(unused)]
+                creator_pid,
+            } => {}
         }
         size
     }
@@ -186,21 +204,43 @@ impl Actor {
 }
 
 impl ActorsDb {
-    pub fn new() -> Self {
-        Self { db: HashMap::new() }
+    pub fn new(cfg: Config) -> Self {
+        Self {
+            db: HashMap::new(),
+            cfg,
+        }
     }
 
-    pub fn insert_event(&mut self, pid: i32, event: Event) {
+    pub fn insert_event(&mut self, pid: i32, event: Event, cfg: &Config) {
         let actor = self.get_actor(pid);
         if let Event::Exit = event {
             actor.state = ActorState::Exited;
         }
-        actor.events.push(event);
+        let mut push_to_a = true;
+        if let Some(binary) = actor.binary.as_ref() {
+            if cfg.trusted_binaries.contains(binary) {
+                push_to_a = false;
+            }
+        }
+        if push_to_a {
+            actor.events.push(event.clone());
+        }
+
+        if let Event::Execve { binary } = event {
+            let actors = self.get_pid_dequeue(pid);
+            let mut actor = Actor::new(pid);
+            actor.binary = Some(binary);
+            actors.push_back(actor);
+        }
+    }
+
+    fn get_pid_dequeue(&mut self, pid: i32) -> &mut VecDeque<Actor> {
+        let entry = self.db.entry(pid);
+        entry.or_default()
     }
 
     fn get_actor(&mut self, pid: i32) -> &mut Actor {
-        let entry = self.db.entry(pid);
-        let actors = entry.or_default();
+        let actors = self.get_pid_dequeue(pid);
         if actors.len() == 0 {
             actors.push_back(Actor::new(pid));
         }
