@@ -6,10 +6,7 @@ use std::{
 use anyhow::{Result, bail};
 
 use crate::{
-    bpfmap::CEvent,
-    config::Config,
-    event_types,
-    utils::{TotalMem, bit_test},
+    Violation, acl::{Acl, Profile, Protectee}, bpfmap::CEvent, config::Config, event_types, utils::{TotalMem, bit_test}
 };
 
 #[derive(Debug, Clone, Copy)]
@@ -18,7 +15,7 @@ pub enum ActorState {
     Exited,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Hash)]
 pub struct AccessType {
     read: bool,
     write: bool,
@@ -27,6 +24,7 @@ pub struct AccessType {
 
 #[derive(Debug, Clone)]
 pub enum Event {
+    // System Calls
     Execve {
         binary: String,
     },
@@ -42,11 +40,24 @@ pub enum Event {
         src: String,
         dst: String,
     },
+
+    // Generic Events
     Exit,
     Start {
         creator_pid: i32,
     },
 }
+
+#[derive(Debug, Clone)]
+pub struct ActorHist {
+    events: Vec<Event>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ActorSummary {
+    events: HashMap<Protectee, AccessType>,
+}
+
 
 #[derive(Debug, Clone)]
 pub struct Actor {
@@ -55,8 +66,10 @@ pub struct Actor {
     state: ActorState,
     creator_pid: Option<i32>,
     binary: Option<String>,
+    profile: Option<Profile>,
     argv: Option<Vec<String>>,
-    events: Vec<Event>,
+    events: ActorHist,
+    summary: ActorSummary,
 }
 
 #[derive(Debug)]
@@ -76,6 +89,24 @@ impl AccessType {
             write: bit_test(spare, ACCESS_TYPE_W),
             execute: bit_test(spare, ACCESS_TYPE_E),
         }
+    }
+
+    pub fn from_rwx_str(mode: &str) -> Result<Self> {
+        let bytes = mode.as_bytes();
+        if bytes.len() != 3 {
+            bail!("access mode must be exactly 3 characters");
+        }
+
+        let valid = |on: u8, off: u8, expected: u8| on == expected || on == off;
+        if !valid(bytes[0], b'-', b'r') || !valid(bytes[1], b'-', b'w') || !valid(bytes[2], b'-', b'x') {
+            bail!("invalid access mode");
+        }
+
+        Ok(Self {
+            read: bytes[0] == b'r',
+            write: bytes[1] == b'w',
+            execute: bytes[2] == b'x',
+        })
     }
 }
 
@@ -131,6 +162,41 @@ impl TotalMem for ActorState {
     }
 }
 
+impl TotalMem for AccessType {
+    fn total_mem(&self) -> usize {
+        mem::size_of::<Self>()
+    }
+}
+
+impl Default for AccessType {
+    fn default() -> Self {
+        Self {
+            read: false,
+            write: false,
+            execute: false,
+        }
+    }
+}
+
+impl TotalMem for ActorHist {
+    fn total_mem(&self) -> usize {
+        let mut size = mem::size_of::<Self>();
+        size += self.events.capacity() * mem::size_of::<Event>();
+        for event in &self.events {
+            size += event.total_mem().saturating_sub(mem::size_of::<Event>());
+        }
+        size
+    }
+}
+
+impl TotalMem for ActorSummary {
+    fn total_mem(&self) -> usize {
+        let mut size = mem::size_of::<Self>();
+        size += self.events.capacity() * mem::size_of::<(Protectee, AccessType)>();
+        size
+    }
+}
+
 impl TotalMem for Actor {
     fn total_mem(&self) -> usize {
         let mut size = mem::size_of::<Self>();
@@ -146,10 +212,11 @@ impl TotalMem for Actor {
             }
         }
 
-        size += self.events.capacity() * mem::size_of::<Event>();
-        for event in &self.events {
-            size += event.total_mem().saturating_sub(mem::size_of::<Event>());
-        }
+        size += self.events.total_mem().saturating_sub(mem::size_of::<ActorHist>());
+        size += self
+            .summary
+            .total_mem()
+            .saturating_sub(mem::size_of::<ActorSummary>());
 
         size
     }
@@ -168,6 +235,37 @@ impl TotalMem for ActorsDb {
         }
 
         size
+    }
+}
+
+impl AccessType {
+    pub fn union(&mut self, other: AccessType) {
+        self.read |= other.read;
+        self.write |= other.write;
+        self.execute |= other.execute;
+    }
+
+    pub fn intersection(&mut self, other: AccessType) {
+        self.read &= other.read;
+        self.write &= other.write;
+        self.execute &= other.execute;
+    }
+
+    pub fn is_superset_of(&self, other: AccessType) -> bool {
+        (!other.read || self.read)
+            && (!other.write || self.write)
+            && (!other.execute || self.execute)
+    }
+
+    pub fn is_subset_of(&self, other: AccessType) -> bool {
+        other.is_superset_of(*self)
+    }
+}
+
+impl ActorSummary {
+    fn get(&mut self, p: Protectee) -> &mut AccessType {
+        let mut entry = self.events.entry(p);
+        entry.or_insert(AccessType::default())
     }
 }
 
@@ -196,10 +294,41 @@ impl Actor {
             start_time,
             state: ActorState::Running,
             creator_pid: None,
-            binary: comm,
+            binary: comm.clone(),
+            profile: comm.map(|b| Profile::Binary(b)),
             argv: None,
-            events: vec![],
+            events: ActorHist { events: vec![] },
+            summary: ActorSummary {
+                events: HashMap::new(),
+            },
         }
+    }
+
+    pub fn update_summary(&mut self, event: &Event, acl: &Acl) -> Option<Violation> {
+        match event {
+            Event::Openat { fpath, mode } => {
+                let p = Protectee::File(fpath.clone());
+                let at = self.summary.get(p.clone());
+                at.union(*mode);
+
+                if let Some(acl_block) = acl.blocks.get(&p) {
+                    if let Some(prof) = self.profile.as_ref() {
+                        let ap = acl_block.get_atype_for_profile(prof);
+                        if !ap.is_superset_of(*at) {
+                            return Some(Violation {
+                                binary: self.binary.clone().unwrap_or("...".to_string()),
+                                pid: self.pid,
+                                p: p.clone(),
+                                atype: *at,
+                            });
+                        }
+                    }
+                }
+            }
+            _ => {}
+        }
+
+        None
     }
 }
 
@@ -211,24 +340,22 @@ impl ActorsDb {
         }
     }
 
-    pub fn insert_event(&mut self, pid: i32, event: Event, cfg: &Config) {
+    pub fn insert_event(&mut self, pid: i32, event: Event, violations: &mut Vec<Violation>, acl: &Acl) {
         let actor = self.get_actor(pid);
         if let Event::Exit = event {
             actor.state = ActorState::Exited;
         }
-        let mut push_to_a = true;
-        if let Some(binary) = actor.binary.as_ref() {
-            if cfg.trusted_binaries.contains(binary) {
-                push_to_a = false;
-            }
+
+        if let Some(v) = actor.update_summary(&event, acl) {
+            println!("{:?}", v);
+            violations.push(v);
         }
-        if push_to_a {
-            actor.events.push(event.clone());
-        }
+        // actor.events.events.push(event.clone());
 
         if let Event::Execve { binary } = event {
             let actors = self.get_pid_dequeue(pid);
             let mut actor = Actor::new(pid);
+            actor.events.events.push(Event::Start { creator_pid: pid });
             actor.binary = Some(binary);
             actors.push_back(actor);
         }

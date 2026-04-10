@@ -6,8 +6,9 @@
 
 #include "../if/syscalls.h"
 
-#define EVENT_BUFFER_SLOTS 64
+#define EVENT_BUFFER_SLOTS (256-1)
 #define EVENT_METADATA_SLOT EVENT_BUFFER_SLOTS
+
 #define O_RDONLY 0
 #define O_WRONLY 1
 #define O_RDWR 2

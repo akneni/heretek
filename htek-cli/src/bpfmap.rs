@@ -11,7 +11,7 @@ use aya::{
 
 use crate::actor::Event;
 
-const EVENT_BUFFER_SLOTS: u64 = 64;
+const EVENT_BUFFER_SLOTS: u64 = 256-1;
 const EVENT_METADATA_SLOT: u32 = EVENT_BUFFER_SLOTS as u32;
 
 #[repr(C)]
