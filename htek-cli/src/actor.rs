@@ -80,14 +80,31 @@ pub struct ActorsDb {
 
 impl AccessType {
     pub fn from_spare(spare: u8) -> Self {
-        const ACCESS_TYPE_R: u8 = 0;
-        const ACCESS_TYPE_W: u8 = 1;
-        const ACCESS_TYPE_E: u8 = 2;
+        const O_RDONLY: u8 = 0;
+        const O_WRONLY: u8 = 1;
+        const O_RDWR: u8 = 2;
 
-        Self {
-            read: bit_test(spare, ACCESS_TYPE_R),
-            write: bit_test(spare, ACCESS_TYPE_W),
-            execute: bit_test(spare, ACCESS_TYPE_E),
+        match spare {
+            O_RDONLY => Self {
+                read: true,
+                write: false,
+                execute: false,
+            },
+            O_WRONLY => Self {
+                read: false,
+                write: true,
+                execute: false,
+            },
+            O_RDWR => Self {
+                read: true,
+                write: true,
+                execute: false,
+            },
+            _ => Self {
+                read: false,
+                write: false,
+                execute: false,
+            },
         }
     }
 
@@ -379,4 +396,14 @@ impl ActorsDb {
 
         actors.back_mut().unwrap()
     }
+}
+
+
+
+
+trait PGraph {
+    fn get<'a>(&'a self, pid: i32, s_time: u64) -> &'a mut Actor;
+    fn insert(&mut self, actor: Actor);
+    fn delete(&mut self, pid: i32, s_time: u64);
+    fn get_latest_prior<'a>(&'a self, pid: i32, time: u64) -> &'a mut Actor;
 }

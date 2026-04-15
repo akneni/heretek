@@ -19,6 +19,7 @@ const EVENT_METADATA_SLOT: u32 = EVENT_BUFFER_SLOTS as u32;
 pub struct CEvent {
     pub event: u32,
     pub pid: i32,
+    pub ktime: u64,
     pub fpath1: [libc::c_char; 256],
     pub fpath2: [libc::c_char; 256],
     pub spare: [u8; 8],
