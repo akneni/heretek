@@ -82,8 +82,8 @@ fn main() {
     loop {
         reader.poll(&mut events).unwrap();
 
-        for (pid, event) in &events {
-            actor_db.insert_event(*pid, event.clone(), &mut violations, &acl);
+        for event in &events {
+            actor_db.insert_event(event.clone(), &mut violations, &acl);
         }
         events.clear();
 

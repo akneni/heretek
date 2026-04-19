@@ -73,7 +73,7 @@ impl BpfEventArrayReader {
         Ok(reader)
     }
 
-    pub fn poll(&mut self, events: &mut Vec<(i32, Event)>) -> Result<(), Box<dyn Error>> {
+    pub fn poll(&mut self, events: &mut Vec<Event>) -> Result<(), Box<dyn Error>> {
         let heads = self.read_heads()?;
 
         if self.tails.len() != heads.len() {
@@ -93,7 +93,7 @@ impl BpfEventArrayReader {
                 let c_event = unsafe { CEvent::from_bytes(&cpu_slots[cpu].bytes) };
 
                 match Event::from(c_event) {
-                    Ok(r) => events.push((c_event.pid, r)),
+                    Ok(r) => events.push(r),
                     Err(e) => eprintln!("Error parsing CEvent: {}", e),
                 };
 

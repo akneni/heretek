@@ -22,7 +22,14 @@ pub struct AccessType {
 }
 
 #[derive(Debug, Clone)]
-pub enum Event {
+pub struct Event {
+    pub pid: i32,
+    pub ktime: u64,
+    pub args: EventArgs,
+}
+
+#[derive(Debug, Clone)]
+pub enum EventArgs {
     // System Calls
     Execve {
         binary: String,
@@ -147,42 +154,48 @@ impl AccessType {
 
 impl Event {
     pub fn from(c_event: &CEvent) -> Result<Self> {
-        match c_event.event {
-            event_types::SYSCALL_OPENAT => Ok(Self::Openat {
+        let args = match c_event.event {
+            event_types::SYSCALL_OPENAT => EventArgs::Openat {
                 fpath: c_event.fpath_str(1)?,
                 mode: AccessType::from_spare(c_event.spare[0]),
-            }),
-            event_types::SYSCALL_EXECVE => Ok(Self::Execve {
+            },
+            event_types::SYSCALL_EXECVE => EventArgs::Execve {
                 binary: c_event.fpath_str(1)?,
-            }),
-            event_types::GENE_START => Ok(Self::Start { creator_pid: 0 }),
-            event_types::GENE_EXIT => Ok(Self::Exit),
+            },
+            event_types::GENE_START => EventArgs::Start { creator_pid: 0 },
+            event_types::GENE_EXIT => EventArgs::Exit,
             _ => bail!("unsupported event"),
-        }
+        };
+
+        Ok(Self {
+            pid: c_event.pid,
+            ktime: c_event.ktime,
+            args,
+        })
     }
 }
 
 impl TotalMem for Event {
     fn total_mem(&self) -> usize {
         let mut size = mem::size_of::<Self>();
-        match self {
-            Self::Execve { binary } => {
+        match &self.args {
+            EventArgs::Execve { binary } => {
                 size += binary.len();
             }
-            Self::Openat { fpath, .. } => {
+            EventArgs::Openat { fpath, .. } => {
                 size += fpath.len();
             }
-            Self::Mmap { fpath, .. } => {
+            EventArgs::Mmap { fpath, .. } => {
                 if let Some(fpath) = fpath {
                     size += fpath.len();
                 }
             }
-            Self::Rename { src, dst } => {
+            EventArgs::Rename { src, dst } => {
                 size += src.len();
                 size += dst.len();
             }
-            Self::Exit => {}
-            Self::Start {
+            EventArgs::Exit => {}
+            EventArgs::Start {
                 #[allow(unused)]
                 creator_pid,
             } => {}
@@ -339,8 +352,8 @@ impl Actor {
     }
 
     pub fn update_summary(&mut self, event: &Event, acl: &Acl) -> Option<Violation> {
-        match event {
-            Event::Openat { fpath, mode } => {
+        match &event.args {
+            EventArgs::Openat { fpath, mode } => {
                 let p = Protectee::File(fpath.clone());
                 let at = self.summary.get(p.clone());
                 at.union(*mode);
@@ -420,9 +433,10 @@ impl ActorsDb {
         }
     }
 
-    pub fn insert_event(&mut self, pid: i32, event: Event, violations: &mut Vec<Violation>, acl: &Acl) {
+    pub fn insert_event(&mut self, event: Event, violations: &mut Vec<Violation>, acl: &Acl) {
+        let pid = event.pid;
         let actor = self.get_actor(pid);
-        if let Event::Exit = event {
+        if let EventArgs::Exit = &event.args {
             actor.actor_md.state = ActorState::Exited;
         }
 
@@ -432,11 +446,15 @@ impl ActorsDb {
         }
         // actor.events.events.push(event.clone());
 
-        if let Event::Execve { binary } = event {
+        if let EventArgs::Execve { binary } = &event.args {
             let actors = self.get_pid_dequeue(pid);
             let mut actor = Actor::new_bootstrap(pid);
-            actor.events.events.push(Event::Start { creator_pid: pid });
-            actor.actor_md.binary = Some(binary);
+            actor.events.events.push(Event {
+                pid,
+                ktime: event.ktime,
+                args: EventArgs::Start { creator_pid: pid },
+            });
+            actor.actor_md.binary = Some(binary.clone());
             actors.push_back(actor);
         }
     }
@@ -460,6 +478,3 @@ impl ActorsDb {
         actors.back_mut().unwrap()
     }
 }
-
-
-
