@@ -1,6 +1,5 @@
 use std::{
-    collections::{HashMap, VecDeque},
-    fs, mem,
+    collections::{HashMap, HashSet, VecDeque}, fs, io, mem
 };
 
 use anyhow::{Result, bail};
@@ -48,6 +47,13 @@ pub enum Event {
     },
 }
 
+/// Actor Temporally Unique ID
+#[derive(Debug, Clone, Copy)]
+pub struct ActorTuid {
+    pub pid: i32,
+    pub start_ktime: u64,
+}
+
 #[derive(Debug, Clone)]
 pub struct ActorHist {
     events: Vec<Event>,
@@ -58,18 +64,30 @@ pub struct ActorSummary {
     events: HashMap<Protectee, AccessType>,
 }
 
+#[derive(Debug, Clone)]
+pub struct ActorMd {
+    pub state: ActorState,
+    pub binary: Option<String>,
+    pub profile: Option<Profile>,
+    pub argv: Option<Vec<String>>,
+}
 
 #[derive(Debug, Clone)]
 pub struct Actor {
-    pid: i32,
-    start_time: Option<u64>,
-    state: ActorState,
-    creator_pid: Option<i32>,
-    binary: Option<String>,
-    profile: Option<Profile>,
-    argv: Option<Vec<String>>,
-    events: ActorHist,
-    summary: ActorSummary,
+    pub pid: i32,
+    pub start_ktime: u64,
+    
+    // Note, these fields describe the process that created this process
+    // and the processes that this process created. This is distinct from 
+    // what is considered a parent and child process. 
+    pub creator_pid: Option<i32>,
+    pub child_pids: HashSet<ActorTuid>,
+
+    // TODO: Add creator ActorTuid cache 
+
+    pub events: ActorHist,
+    pub summary: ActorSummary,
+    pub actor_md: ActorMd,
 }
 
 #[derive(Debug)]
@@ -218,11 +236,11 @@ impl TotalMem for Actor {
     fn total_mem(&self) -> usize {
         let mut size = mem::size_of::<Self>();
 
-        if let Some(binary) = &self.binary {
+        if let Some(binary) = &self.actor_md.binary {
             size += binary.len();
         }
 
-        if let Some(argv) = &self.argv {
+        if let Some(argv) = &self.actor_md.argv {
             size += argv.capacity() * mem::size_of::<String>();
             for arg in argv {
                 size += arg.len();
@@ -281,44 +299,43 @@ impl AccessType {
 
 impl ActorSummary {
     fn get(&mut self, p: Protectee) -> &mut AccessType {
-        let mut entry = self.events.entry(p);
+        let entry = self.events.entry(p);
         entry.or_insert(AccessType::default())
     }
 }
 
 impl Actor {
-    pub fn new(pid: i32) -> Self {
+    pub fn new(pid: i32, start_time: u64) -> Self {
         let comm = match fs::canonicalize(&format!("/proc/{}/exe", pid)) {
             Ok(r) => Some(r.to_str().unwrap().to_string()),
             Err(_e) => None,
         };
-        let start_time = match fs::read_to_string(format!("/proc/{}/stat", pid)) {
-            Ok(stat) => {
-                let end_comm = stat.rfind(')');
-                match end_comm
-                    .and_then(|idx| stat.get(idx + 2..))
-                    .map(|rest| rest.split_whitespace().collect::<Vec<_>>())
-                {
-                    Some(fields) => fields.get(19).and_then(|value| value.parse().ok()),
-                    None => None,
-                }
-            }
-            Err(_) => None,
+
+        let actor_md = ActorMd {
+            state: ActorState::Running,
+            binary: comm.clone(),
+            profile: comm.map(|b| Profile::Binary(b)),
+            argv: Some(Self::get_cmdline(pid).unwrap()),
         };
 
         Self {
             pid,
-            start_time,
-            state: ActorState::Running,
+            start_ktime: start_time,
             creator_pid: None,
-            binary: comm.clone(),
-            profile: comm.map(|b| Profile::Binary(b)),
-            argv: None,
+            child_pids: HashSet::new(),
+            actor_md: actor_md,
             events: ActorHist { events: vec![] },
             summary: ActorSummary {
                 events: HashMap::new(),
             },
         }
+    }
+
+    /// This should only be used when the daemon is first started up to get the 
+    /// start time of all already existing processes. 
+    pub fn new_bootstrap(pid: i32) -> Self {
+        let start_time = Self::usrsp_ktime_get_boot_ns(pid).unwrap();
+        Self::new(pid, start_time)
     }
 
     pub fn update_summary(&mut self, event: &Event, acl: &Acl) -> Option<Violation> {
@@ -329,11 +346,11 @@ impl Actor {
                 at.union(*mode);
 
                 if let Some(acl_block) = acl.blocks.get(&p) {
-                    if let Some(prof) = self.profile.as_ref() {
+                    if let Some(prof) = self.actor_md.profile.as_ref() {
                         let ap = acl_block.get_atype_for_profile(prof);
                         if !ap.is_superset_of(*at) {
                             return Some(Violation {
-                                binary: self.binary.clone().unwrap_or("...".to_string()),
+                                binary: self.actor_md.binary.clone().unwrap_or("...".to_string()),
                                 pid: self.pid,
                                 p: p.clone(),
                                 atype: *at,
@@ -346,6 +363,52 @@ impl Actor {
         }
 
         None
+    }
+
+    /// User Space Kernel Time Get Boot Nanoseconds
+    /// This returns a timer that has the same semantics as bpf_ktime_get_boot_ns()
+    /// The only caveat is that this 
+    fn usrsp_ktime_get_boot_ns(pid: i32) -> io::Result<u64> {
+        let path = format!("/proc/{pid}/stat");
+        let stat = fs::read_to_string(path)?;
+
+        let rp = stat
+            .rfind(')')
+            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "bad /proc stat format"))?;
+
+        let after = stat
+            .get(rp + 2..) // skip ") "
+            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "bad /proc stat format"))?;
+
+        let starttime_ticks_str = after
+            .split_whitespace()
+            .nth(19)
+            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "missing starttime field"))?;
+
+        let starttime_ticks: u64 = starttime_ticks_str
+            .parse()
+            .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "invalid starttime field"))?;
+
+        let hz = unsafe { libc::sysconf(libc::_SC_CLK_TCK) };
+        if hz <= 0 {
+            return Err(io::Error::new(
+                io::ErrorKind::Other,
+                "sysconf(_SC_CLK_TCK) failed",
+            ));
+        }
+
+        Ok(starttime_ticks.saturating_mul(1_000_000_000) / hz as u64)
+    }
+
+    fn get_cmdline(pid: i32) -> std::io::Result<Vec<String>> {
+        let path = format!("/proc/{}/cmdline", pid);
+        let data = fs::read(path)?;
+
+        Ok(data
+            .split(|b| *b == 0)
+            .filter(|s| !s.is_empty())
+            .map(|s| String::from_utf8_lossy(s).into_owned())
+            .collect())
     }
 }
 
@@ -360,7 +423,7 @@ impl ActorsDb {
     pub fn insert_event(&mut self, pid: i32, event: Event, violations: &mut Vec<Violation>, acl: &Acl) {
         let actor = self.get_actor(pid);
         if let Event::Exit = event {
-            actor.state = ActorState::Exited;
+            actor.actor_md.state = ActorState::Exited;
         }
 
         if let Some(v) = actor.update_summary(&event, acl) {
@@ -371,9 +434,9 @@ impl ActorsDb {
 
         if let Event::Execve { binary } = event {
             let actors = self.get_pid_dequeue(pid);
-            let mut actor = Actor::new(pid);
+            let mut actor = Actor::new_bootstrap(pid);
             actor.events.events.push(Event::Start { creator_pid: pid });
-            actor.binary = Some(binary);
+            actor.actor_md.binary = Some(binary);
             actors.push_back(actor);
         }
     }
@@ -386,12 +449,12 @@ impl ActorsDb {
     fn get_actor(&mut self, pid: i32) -> &mut Actor {
         let actors = self.get_pid_dequeue(pid);
         if actors.len() == 0 {
-            actors.push_back(Actor::new(pid));
+            actors.push_back(Actor::new_bootstrap(pid));
         }
 
         let actor = actors.back().unwrap();
-        if let ActorState::Exited = actor.state {
-            actors.push_back(Actor::new(pid));
+        if let ActorState::Exited = actor.actor_md.state {
+            actors.push_back(Actor::new_bootstrap(pid));
         }
 
         actors.back_mut().unwrap()
@@ -400,10 +463,3 @@ impl ActorsDb {
 
 
 
-
-trait PGraph {
-    fn get<'a>(&'a self, pid: i32, s_time: u64) -> &'a mut Actor;
-    fn insert(&mut self, actor: Actor);
-    fn delete(&mut self, pid: i32, s_time: u64);
-    fn get_latest_prior<'a>(&'a self, pid: i32, time: u64) -> &'a mut Actor;
-}

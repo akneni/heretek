@@ -1,5 +1,6 @@
 #![allow(unused)]
 
+// System Calls
 pub const SYSCALL_READ: u32 = 0;
 pub const SYSCALL_WRITE: u32 = 1;
 pub const SYSCALL_OPEN: u32 = 2;

@@ -15,6 +15,7 @@ mod logic;
 mod acl;
 mod acl_file;
 mod utils;
+mod pgraph;
 
 #[derive(Debug)]
 struct Violation {
