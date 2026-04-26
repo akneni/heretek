@@ -1,11 +1,11 @@
-#include "../if/vmlinux.h"
+#include "../if_bpf/vmlinux.h"
 
 #include <bpf/bpf_helpers.h>
 #include <bpf/bpf_tracing.h>
 #include <bpf/bpf_core_read.h>
 #include <stdbool.h>
 
-#include "../if/syscalls.h"
+#include "../if_bpf/syscalls.h"
 #include "utils.c"
 #include "events.c"
 

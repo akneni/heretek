@@ -1,6 +1,7 @@
 **/target/
 htek-ebpf/build/
 script.ipynb
+build/*
 
 # pixi environments
 .pixi/*

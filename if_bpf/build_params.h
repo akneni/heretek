@@ -1,0 +1,1 @@
+#define RING_BUF_SIZE_LOG2 (7)

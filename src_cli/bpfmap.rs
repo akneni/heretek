@@ -10,9 +10,11 @@ use aya::{
 };
 
 use crate::actor::Event;
+use crate::build_params;
 
-const EVENT_BUFFER_SLOTS: u64 = 256-1;
+const EVENT_BUFFER_SLOTS: u64 = 1 << build_params::RING_BUF_SIZE_LOG2;
 const EVENT_METADATA_SLOT: u32 = EVENT_BUFFER_SLOTS as u32;
+const EVENT_PARAM_SLOT: u32 = EVENT_BUFFER_SLOTS as u32 + 1;
 
 #[repr(C)]
 #[derive(Clone, Copy)]

@@ -1,0 +1,8 @@
+# Users should not change this file. This contains defaults for all build parameters. 
+# If you want to change a build parameter, override the default by assigning it a value in ./build-parameters.toml
+
+
+# Size of the per-core ring buffers used to stream events from eBPF to the daemon. 
+# Note that this must be a multiple of two and be a minimum of 4. 
+RING_BUF_SIZE_LOG2=7
+

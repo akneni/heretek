@@ -1,10 +1,17 @@
+#include "../if_bpf/vmlinux.h"
+#include "../if_bpf/build_params.h"
+
+#include <bpf/bpf_helpers.h>
+#include <bpf/bpf_tracing.h>
+#include <bpf/bpf_core_read.h>
+#include <stdbool.h>
+
 #ifndef EVENTS_C
 #define EVENTS_C
 
-#define EVENT_BUF_SLOTS_LOG2 8
-#define EVENT_BUFFER_SLOTS (1 << EVENT_BUF_SLOTS_LOG2)
-#define EVENT_METADATA_SLOT EVENT_BUFFER_SLOTS
-#define EVENT_PARAM_SLOT (EVENT_BUFFER_SLOTS - 1)
+#define EVENT_BUFFER_SLOTS (1 << RING_BUF_SIZE_LOG2)
+#define EVENT_METADATA_SLOT (EVENT_BUFFER_SLOTS + 0)
+#define EVENT_PARAM_SLOT (EVENT_BUFFER_SLOTS + 1)
 
 typedef struct event {
     __u32 event;

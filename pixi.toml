@@ -6,8 +6,8 @@ platforms = ["linux-64"]
 version = "0.1.0"
 
 [tasks]
-build = { cmd = "bash utils/build.sh", inputs = ["src/*.c", "if/*.h", "utils/build.sh"], outputs = ["build/heretek.ebpf.o"] }
-load = { cmd = "bash utils/load.sh", depends-on = ["unload", "build"] }
-unload = { cmd = "bash utils/unload.sh" }
+build = { cmd = "bash build_utils/build.sh", inputs = ["src/*.c", "if/*.h", "utils/build.sh"], outputs = ["build/heretek.ebpf.o"] }
+load = { cmd = "bash build_utils/load.sh", depends-on = ["unload", "build"] }
+unload = { cmd = "bash build_utils/unload.sh" }
 
 [dependencies]
