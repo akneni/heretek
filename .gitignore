@@ -1,3 +1,7 @@
 **/target/
 htek-ebpf/build/
 script.ipynb
+
+# pixi environments
+.pixi/*
+!.pixi/config.toml
