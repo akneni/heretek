@@ -1,4 +1,5 @@
 use std::{fs, process, thread, time::{Duration, Instant}};
+use std::os::unix::net::{UnixListener, UnixStream};
 
 use anyhow::{Result, bail};
 use directories::ProjectDirs;
@@ -17,6 +18,7 @@ mod acl_file;
 mod utils;
 mod pgraph;
 mod build_params;
+mod ipc;
 
 #[derive(Debug)]
 struct Violation {
@@ -73,6 +75,9 @@ fn main() {
     let acl_json: Vec<AclJsonFile> = serde_json::from_str(&acl_str).unwrap();
     let acl = Acl::from(acl_json).unwrap();
 
+    let uds_path = proj.data_dir().join("RPC.sock");
+    let socket = UnixListener::bind(&uds_path).unwrap();
+
     let mut reader =
         bpfmap::BpfEventArrayReader::from_pinned_path("/sys/fs/bpf/heretek-maps/events").unwrap();
 
@@ -84,8 +89,11 @@ fn main() {
 
     loop {
         let timer = Instant::now();
+
+        // 1) Drain the ring buffers and update it's internal pgraph structure with the events just pulled
         reader.poll(&mut events).unwrap();
 
+        // 2) Run checks against the ACL to check for violations
         for event in &events {
             actor_db.insert_event(event.clone(), &mut violations, &acl);
         }
@@ -93,7 +101,11 @@ fn main() {
 
         fs::write("actor_db.log", format!("{:#?}\n\n{}", &actor_db, actor_db.total_mem())).unwrap();
         
+        // 3) Check for IPC RPCs from CLI invocations of this tool (like `htek desc <pid>`)
+        // TODO
 
+
+        // 4) Sleep for an alloted amount of time. 
         println!("Time Elapsed: {:?}", timer.elapsed());
         let te = timer.elapsed().as_millis() as u64;
         let iter_interval_us = iter_interval.as_millis() as u64;
