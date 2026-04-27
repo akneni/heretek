@@ -9,6 +9,7 @@ use crate::{acl_file::AclJsonFile, actor::AccessType};
 #[derive(Debug, Clone, Hash, Eq, PartialEq)]
 pub enum Protectee {
     File(String),
+    Syscall(String),
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq)]

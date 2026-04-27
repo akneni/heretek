@@ -1,4 +1,4 @@
-use std::{fs, process};
+use std::{fs, process, thread, time::{Duration, Instant}};
 
 use anyhow::{Result, bail};
 use directories::ProjectDirs;
@@ -80,7 +80,10 @@ fn main() {
     let mut actor_db = ActorsDb::new(cfg.clone());
     let mut violations: Vec<Violation> = vec![];
 
+    let iter_interval = Duration::from_micros(50_000);
+
     loop {
+        let timer = Instant::now();
         reader.poll(&mut events).unwrap();
 
         for event in &events {
@@ -89,6 +92,19 @@ fn main() {
         events.clear();
 
         fs::write("actor_db.log", format!("{:#?}\n\n{}", &actor_db, actor_db.total_mem())).unwrap();
-        std::thread::sleep(std::time::Duration::from_millis(10));
+        
+
+        println!("Time Elapsed: {:?}", timer.elapsed());
+        let te = timer.elapsed().as_millis() as u64;
+        let iter_interval_us = iter_interval.as_millis() as u64;
+        if te >= iter_interval_us {
+            continue;
+        }
+        else {
+            let time_left_us = iter_interval_us - te;
+            if time_left_us > 1000 {
+                thread::sleep(Duration::from_millis(time_left_us));
+            } 
+        }
     }
 }

@@ -2,6 +2,7 @@
 htek-ebpf/build/
 script.ipynb
 build/*
+.vscode/*
 
 # pixi environments
 .pixi/*

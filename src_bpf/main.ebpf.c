@@ -14,8 +14,9 @@
 #define O_RDWR 2
 #define O_ACCMODE 3
 
-#define LSM_DENY 0
-#define LSM_ALLOW 1
+#define EPERM 1
+#define LSM_ALLOW 0
+#define LSM_DENY (-EPERM)
 
 SEC("tracepoint/syscalls/sys_enter_openat")
 int handle_openat(struct trace_event_raw_sys_enter *ctx) {
