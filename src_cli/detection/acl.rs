@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 use anyhow::Result;
-use serde::{Deserialize, Serialize};
 
-use crate::{acl_file::AclJsonFile, actor::AccessType};
+use crate::pgraph::AccessType;
+use crate::detection::AclJsonFile;
 
 
 

@@ -1,24 +1,21 @@
-use std::{fs, process, thread, time::{Duration, Instant}};
+use std::{fs, io::{Read, Write}, process, thread, time::{Duration, Instant}};
 use std::os::unix::net::{UnixListener, UnixStream};
 
 use anyhow::{Result, bail};
 use directories::ProjectDirs;
 
 use crate::{
-    acl::{Acl, Protectee}, acl_file::AclJsonFile, actor::{AccessType, ActorsDb}, config::{Config, ConfigFile}, utils::TotalMem
+    detection::{Acl, Protectee, AclJsonFile}, config::{Config, ConfigFile}, rpc::{Rpc, StreamSendable}, utils::TotalMem,
+    pgraph::{AccessType, ActorsDb},
 };
 
-mod actor;
-mod bpfmap;
+mod bpf;
 mod config;
-mod event_types;
-mod logic;
-mod acl;
-mod acl_file;
+mod detection;
 mod utils;
 mod pgraph;
 mod build_params;
-mod ipc;
+mod rpc;
 
 #[derive(Debug)]
 struct Violation {
@@ -54,7 +51,51 @@ fn preflight() -> Result<Config> {
     Ok(cfg)
 }
 
+fn temp() {
+    // let s = std::env::args().skip(1).next().unwrap();
+
+
+    // if s == "listen" {
+    //     let mut counter = 0;
+    //     let mut scoket_l = UnixListener::bind("thing.sock").unwrap();
+    //     scoket_l.set_nonblocking(true).unwrap();
+        
+    
+    //     loop {
+    //         match scoket_l.accept() {
+    //             Ok((mut stream, _)) => {
+    //                 let mut msg = vec![];
+    //                 stream.read_to_end(&mut msg).unwrap();
+                
+    //                 println!("{}", String::from_utf8(msg).unwrap());
+    //                 break;
+    //             },
+    //             Err(e) => {
+    //                 counter += 1;
+    //                 eprintln!("error: {} (counter = {})", e, counter);
+
+    //             }
+    //         };
+    //     }
+
+
+    
+    //     let _ = fs::remove_file("thing.sock");
+    // }
+    // else if s == "send" {
+    //     let mut stream = UnixStream::connect("thing.sock").unwrap();
+
+    //     stream.write(b"message asoudhfsoih").unwrap();
+    //     stream.flush().unwrap();
+    // }   
+
+    // std::process::exit(0);
+}
+
 fn main() {
+    temp();
+
+
     let cfg = match preflight() {
         Ok(r) => r,
         Err(e) => {
@@ -77,9 +118,10 @@ fn main() {
 
     let uds_path = proj.data_dir().join("RPC.sock");
     let socket = UnixListener::bind(&uds_path).unwrap();
+    socket.set_nonblocking(true).unwrap();
 
     let mut reader =
-        bpfmap::BpfEventArrayReader::from_pinned_path("/sys/fs/bpf/heretek-maps/events").unwrap();
+        bpf::BpfEventArrayReader::from_pinned_path("/sys/fs/bpf/heretek-maps/events").unwrap();
 
     let mut events = vec![];
     let mut actor_db = ActorsDb::new(cfg.clone());
@@ -102,8 +144,9 @@ fn main() {
         fs::write("actor_db.log", format!("{:#?}\n\n{}", &actor_db, actor_db.total_mem())).unwrap();
         
         // 3) Check for IPC RPCs from CLI invocations of this tool (like `htek desc <pid>`)
-        // TODO
-
+        if let Err(e) = rpc::handle_rpc(&socket, &mut actor_db) {
+            eprintln!("Error processing RPC: {e}");
+        }
 
         // 4) Sleep for an alloted amount of time. 
         println!("Time Elapsed: {:?}", timer.elapsed());

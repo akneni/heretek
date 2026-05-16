@@ -9,7 +9,7 @@ use aya::{
     maps::{Map, MapData, PerCpuArray},
 };
 
-use crate::actor::Event;
+use crate::pgraph::Event;
 use crate::build_params;
 
 const EVENT_BUFFER_SLOTS: u64 = 1 << build_params::RING_BUF_SIZE_LOG2;

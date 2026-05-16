@@ -5,8 +5,10 @@ use std::{
 use anyhow::{Result, bail};
 
 use crate::{
-    Violation, acl::{Acl, Profile, Protectee}, bpfmap::CEvent, config::Config, event_types, utils::{TotalMem, bit_test}
+    Violation, detection::{Acl, Profile, Protectee}, bpf::{CEvent}, config::Config, utils::{TotalMem, bit_test}
 };
+
+use crate::bpf::event_types;
 
 #[derive(Debug, Clone, Copy)]
 pub enum ActorState {

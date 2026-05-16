@@ -1,6 +1,11 @@
+mod actor;
+
 use std::collections::HashMap;
 
-use crate::actor::Actor;
+pub use actor::*;
+
+
+
 
 pub trait PGraph {
     fn get<'a>(&'a mut self, pid: i32, s_time: u64) -> Option<&'a mut Actor>;
