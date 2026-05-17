@@ -130,7 +130,6 @@ fn main() {
             daemon(&config);
         }
         CliCommand::SummaryPid { pid } => {
-            println!("{:?}", rpc::get_uds_path());
             let stream = rpc::connect_uds_ipc(&config);
             let rpc = rpc::Rpc::GetSummaryPid{pid};
             rpc.stream_send(&stream).unwrap();
