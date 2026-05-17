@@ -1,10 +1,8 @@
-use std::collections::HashMap;
 use anyhow::Result;
+use std::collections::HashMap;
 
-use crate::pgraph::AccessType;
 use crate::detection::AclJsonFile;
-
-
+use crate::pgraph::AccessType;
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq)]
 pub enum Protectee {
@@ -16,7 +14,7 @@ pub enum Protectee {
 pub enum Profile {
     Profile(String),
     Binary(String),
-    ProfedBin{b: String, p: String},
+    ProfedBin { b: String, p: String },
 }
 
 #[derive(Debug, Clone)]
@@ -31,9 +29,9 @@ pub struct Acl {
 }
 
 impl AclBlock {
-    /// If a process doesn’t match any of the explicit permissions (rwx, rw-, etc.), 
-    /// it will use the permissions specified by default. If a process matches multiple 
-    /// explicit permissions groups, it’s permissions will be the intersection of all the permissions. 
+    /// If a process doesn’t match any of the explicit permissions (rwx, rw-, etc.),
+    /// it will use the permissions specified by default. If a process matches multiple
+    /// explicit permissions groups, it’s permissions will be the intersection of all the permissions.
     pub fn get_atype_for_profile(&self, prof: &Profile) -> AccessType {
         let mut matched = false;
         let mut atype = self.default;
@@ -60,11 +58,7 @@ impl AclBlock {
             }
         }
 
-        if matched {
-            atype
-        } else {
-            self.default
-        }
+        if matched { atype } else { self.default }
     }
 }
 

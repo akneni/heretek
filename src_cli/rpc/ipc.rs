@@ -1,36 +1,27 @@
-use std::{io::{Read, Write}, os::unix::net::{UnixListener, UnixStream}};
+use std::{
+    io::{Read, Write},
+    os::unix::net::UnixListener,
+};
 
-use anyhow::{Error, Result, bail};
+use anyhow::Result;
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 
-use crate::pgraph::ActorsDb;
-
+use crate::pgraph::PGraph;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Rpc {
     // htek summary <pid | binary-path>
-    GetSummaryPid {
-        pid: i32,
-    },
-    GetSummaryExe {
-        exe_path: String,
-    },
+    GetSummaryPid { pid: i32 },
+    GetSummaryExe { exe_path: String },
 
-    SetParentProfile {
-        profile: String,
-    },
+    SetParentProfile { profile: String },
 }
-
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum RpcResult {
-    GetSummary (String),
-    SetParentProfileRes {
-        msg: String,
-        success: bool,
-    },
+    GetSummary(String),
+    SetParentProfileRes { msg: String, success: bool },
 }
-
 
 impl StreamSendable for Rpc {}
 impl StreamSendable for RpcResult {}
@@ -58,13 +49,11 @@ pub trait StreamSendable: Sized + Serialize + DeserializeOwned {
     }
 }
 
-pub fn handle_rpc(socket: &UnixListener, actor_db: &mut ActorsDb) -> Result<()> {
+pub fn handle_rpc(socket: &UnixListener, actor_db: &mut PGraph) -> Result<()> {
     let mut stream = match socket.accept() {
-        Ok((stream, _)) => {
-            stream
-        },
+        Ok((stream, _)) => stream,
         Err(_e) => {
-            // We get an "os error 11" if there are no messages in the message queue. 
+            // We get an "os error 11" if there are no messages in the message queue.
             return Ok(());
         }
     };
@@ -75,25 +64,25 @@ pub fn handle_rpc(socket: &UnixListener, actor_db: &mut ActorsDb) -> Result<()> 
         Rpc::GetSummaryExe { exe_path } => {
             let res = RpcResult::GetSummary("unimplemented".to_string());
             res.stream_send(&mut stream)?;
-        },
+        }
         Rpc::GetSummaryPid { pid } => {
-            let res_json = match actor_db.db.get(&pid) {
+            let res_json = match actor_db.get_node_by_latest_pid_mut(pid) {
                 Some(r) => {
-                    let actor = r.iter().last().unwrap();
+                    let actor = &r.actor;
                     format!("{:?}", actor.summary)
-                },
+                }
                 None => {
                     format!("PID {} not found", pid)
-                },
+                }
             };
 
             let res = RpcResult::GetSummary(res_json);
             res.stream_send(&mut stream)?;
-        },
+        }
         Rpc::SetParentProfile { profile } => {
             let res = RpcResult::GetSummary("unimplemented".to_string());
             res.stream_send(&mut stream)?;
-        },
+        }
     }
-    Ok(())  
+    Ok(())
 }

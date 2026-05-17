@@ -1,13 +1,12 @@
 use std::{collections::HashMap, fs, process};
 
-
 fn parse_build_param_str(toml: &str, params: &mut HashMap<String, String>) {
     for line in toml.split('\n') {
         let mut kv_str = line.trim();
         if let Some((x, _)) = line.split_once('#') {
             kv_str = x.trim();
         }
-        if let Some((k, v)) = kv_str.split_once("=")  {
+        if let Some((k, v)) = kv_str.split_once("=") {
             params.insert(k.trim().to_string(), v.trim().to_string());
         }
     }
@@ -59,7 +58,6 @@ fn generate_const_rs(build_params: &HashMap<String, String>) {
 
     fs::write(filename, payload).unwrap();
 }
-
 
 fn generate_const_c(build_params: &HashMap<String, String>) {
     let filename = "if_bpf/build_params.h";
