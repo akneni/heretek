@@ -1,12 +1,14 @@
 use anyhow::Result;
 use std::collections::HashMap;
+use std::fs;
+use std::path::PathBuf;
 
 use crate::detection::AclJsonFile;
 use crate::pgraph::AccessType;
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq)]
 pub enum Protectee {
-    File(String),
+    File(PathBuf),
     Syscall(String),
 }
 
@@ -83,8 +85,9 @@ impl Acl {
             }
 
             for protectee in entry.protectees {
+                let protectee_f = fs::canonicalize(protectee).unwrap();
                 blocks.insert(
-                    Protectee::File(protectee),
+                    Protectee::File(protectee_f),
                     AclBlock {
                         default,
                         exceptions: exceptions.clone(),

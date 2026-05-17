@@ -9,27 +9,22 @@ use anyhow::{Result, bail};
 use directories::ProjectDirs;
 
 use crate::pgraph::PGraph;
+use crate::rpc::{RpcResult, StreamSendable};
+use crate::uinterf::CliCommand;
 use crate::{
-    config::{Config, ConfigFile},
-    detection::{Acl, AclJsonFile, Protectee},
-    pgraph::AccessType,
+    uinterf::{Config, ConfigFile},
+    detection::{Acl, AclJsonFile},
 };
 
 mod bpf;
-mod build_params;
-mod config;
+mod uinterf;
 mod detection;
 mod pgraph;
 mod rpc;
+
+mod build_params;
 mod utils;
 
-#[derive(Debug)]
-struct Violation {
-    pid: i32,
-    binary: String,
-    p: Protectee,
-    atype: AccessType,
-}
 
 fn preflight() -> Result<Config> {
     if "root" != whoami::account()? {
@@ -58,15 +53,8 @@ fn preflight() -> Result<Config> {
 }
 
 
-fn main() {
-    let cfg = match preflight() {
-        Ok(r) => r,
-        Err(e) => {
-            eprintln!("Preflight Checks Failed:\n{}", e);
-            process::exit(1);
-        }
-    };
 
+fn daemon(config: &Config) {
     let proj = ProjectDirs::from("com", "heretek", "heretek").unwrap();
     let acl_path = proj.config_dir().join("ACL.json");
     let acl_str = match fs::read_to_string(&acl_path) {
@@ -79,16 +67,14 @@ fn main() {
     let acl_json: Vec<AclJsonFile> = serde_json::from_str(&acl_str).unwrap();
     let acl = Acl::from(acl_json).unwrap();
 
-    let uds_path = proj.data_dir().join("RPC.sock");
-    let socket = UnixListener::bind(&uds_path).unwrap();
+    let socket = rpc::create_uds_ipc(&config);
     socket.set_nonblocking(true).unwrap();
 
     let mut reader =
         bpf::BpfEventArrayReader::from_pinned_path("/sys/fs/bpf/heretek-maps/events").unwrap();
 
     let mut events = vec![];
-    let mut actor_db = PGraph::new();
-    let mut violations: Vec<Violation> = vec![];
+    let mut pgraph_db = PGraph::new();
 
     let iter_interval = Duration::from_micros(50_000);
 
@@ -99,21 +85,18 @@ fn main() {
         reader.poll(&mut events).unwrap();
 
         // 2) Run checks against the ACL to check for violations
-        // for event in &events {
-        //     actor_db.insert_event(event.clone(), &mut violations, &acl);
-        // }
-        // events.clear();
+        for event in events.into_iter() {
+            pgraph::handle_event(&mut pgraph_db, event);
+        }
+        events = vec![];
 
-        // fs::write(
-        //     "actor_db.log",
-        //     format!("{:#?}\n\n{}", &actor_db, actor_db.total_mem()),
-        // )
-        // .unwrap();
+ 
 
         // 3) Check for IPC RPCs from CLI invocations of this tool (like `htek desc <pid>`)
-        if let Err(e) = rpc::handle_rpc(&socket, &mut actor_db) {
+        if let Err(e) = rpc::handle_rpc(&socket, &mut pgraph_db) {
             eprintln!("Error processing RPC: {e}");
         }
+
 
         // 4) Sleep for an alloted amount of time.
         println!("Time Elapsed: {:?}", timer.elapsed());
@@ -128,4 +111,44 @@ fn main() {
             }
         }
     }
+}
+
+fn main() {
+    let config = match preflight() {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("Preflight Checks Failed:\n{}", e);
+            process::exit(1);
+        }
+    };
+
+
+    let cli_cmd = uinterf::parse_cli();
+
+    match cli_cmd {
+        CliCommand::Daemon => {
+            daemon(&config);
+        }
+        CliCommand::SummaryPid { pid } => {
+            println!("{:?}", rpc::get_uds_path());
+            let stream = rpc::connect_uds_ipc(&config);
+            let rpc = rpc::Rpc::GetSummaryPid{pid};
+            rpc.stream_send(&stream).unwrap();
+            let rpc_res = RpcResult::stream_recv(&stream).unwrap();
+            match rpc_res {
+                rpc::RpcResult::GetSummary(s) => {
+                    println!("{}", s);
+                }
+                _ => {
+                    unreachable!();
+                }
+            }
+        
+        }
+        CliCommand::SummaryExe { exe_path } => {
+            unimplemented!("unimplemented");
+        }
+    }
+
+
 }

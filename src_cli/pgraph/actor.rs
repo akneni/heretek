@@ -1,9 +1,9 @@
 use std::{collections::HashMap, fs, io, mem};
 
+use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    Violation,
     detection::{Acl, Profile, Protectee},
     pgraph::{AccessType, Event, EventArgs},
     utils::TotalMem,
@@ -108,6 +108,8 @@ impl ActorSummary {
     }
 }
 
+
+/// This block of implemtnations are generic helpers for this type
 impl Actor {
     pub fn new(pid: i32, start_time: u64) -> Self {
         let comm = match fs::canonicalize(&format!("/proc/{}/exe", pid)) {
@@ -119,7 +121,7 @@ impl Actor {
             state: ActorState::Running,
             binary: comm.clone(),
             profile: comm.map(|b| Profile::Binary(b)),
-            argv: Some(Self::get_cmdline(pid).unwrap()),
+            argv: Self::get_cmdline(pid).map(|x| Some(x)).unwrap_or(None),
         };
 
         Self {
@@ -135,38 +137,33 @@ impl Actor {
         }
     }
 
-    /// This should only be used when the daemon is first started up to get the
-    /// start time of all already existing processes.
-    pub fn new_bootstrap(pid: i32) -> Self {
-        let start_time = Self::usrsp_ktime_get_boot_ns(pid).unwrap();
-        Self::new(pid, start_time)
+    fn new_infer_ktime(pid: i32) -> Result<Self> {
+        let ktime = Self::usrsp_ktime_get_boot_ns(pid)?;
+        Ok(Self::new(pid, ktime))
     }
 
-    pub fn update_summary(&mut self, event: &Event, acl: &Acl) -> Option<Violation> {
-        match &event.args {
-            EventArgs::Openat { fpath, mode } => {
-                let p = Protectee::File(fpath.clone());
-                let at = self.summary.get(p.clone());
-                at.union(*mode);
+    /// Gets the parent PID (NOT the creator ID)
+    fn get_ppid(&self) -> Result<i32> {
+        let pid = self.id.pid;
+      let stat = fs::read_to_string(format!("/proc/{pid}/stat"))?;
 
-                if let Some(acl_block) = acl.blocks.get(&p) {
-                    if let Some(prof) = self.actor_md.profile.as_ref() {
-                        let ap = acl_block.get_atype_for_profile(prof);
-                        if !ap.is_superset_of(*at) {
-                            return Some(Violation {
-                                binary: self.actor_md.binary.clone().unwrap_or("...".to_string()),
-                                pid: self.id.pid,
-                                p: p.clone(),
-                                atype: *at,
-                            });
-                        }
-                    }
-                }
-            }
-            _ => {}
-        }
+      // Format:
+      // pid (comm) state ppid ...
+      let after_comm = stat
+          .rsplit_once(") ")
+          .context("malformed /proc stat: missing process name terminator")?
+          .1;
 
-        None
+      let mut fields = after_comm.split_whitespace();
+
+      let _state = fields.next().context("missing process state")?;
+      let ppid = fields
+          .next()
+          .context("missing parent pid")?
+          .parse::<i32>()
+          .context("invalid parent pid")?;
+
+      Ok(ppid)
     }
 
     /// User Space Kernel Time Get Boot Nanoseconds
@@ -212,5 +209,34 @@ impl Actor {
             .filter(|s| !s.is_empty())
             .map(|s| String::from_utf8_lossy(s).into_owned())
             .collect())
+    }
+}
+
+
+/// This block of functoins are event handlers
+/// Each of these return a bool. It will be false if there are no violations and will be true
+/// if there is a vioilation the actor has been deemed malicious. 
+impl Actor {
+    pub fn handle_openat(&mut self, fpath: String, mode: AccessType) -> bool {
+        let ffpath = fs::canonicalize(fpath).unwrap();
+        let protectee = Protectee::File(ffpath);
+
+        let entry = self.summary.events.entry(protectee);
+        let v = entry.or_insert(mode);
+        v.union(mode);
+
+        false
+    }
+
+    pub fn handle_rename(&mut self, src: String, dest: String) -> bool {        
+        self.handle_openat(src, AccessType::from_rwx_str("rw-").unwrap()) ||
+        self.handle_openat(dest, AccessType::from_rwx_str("rw-").unwrap())
+    }
+
+    pub fn handle_mmap(&mut self, fpath: Option<String>, mode: AccessType) -> bool {
+        if let Some(fpath) = fpath {
+            return self.handle_openat(fpath, mode);
+        }
+        false
     }
 }

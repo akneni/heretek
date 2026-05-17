@@ -19,3 +19,15 @@
 
 ### Process Model
 - We will think of all processes of having an ID of (pid, start_ktime). 
+
+### Docs
+- We can start the daemon by doing the following. 
+```bash
+# Need to be root
+htek daemon
+```
+
+- We can query a processes summary by doing the following
+```bash
+htek summary <pid | executable_path>
+```

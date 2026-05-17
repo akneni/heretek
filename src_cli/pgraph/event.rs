@@ -187,3 +187,13 @@ impl TotalMem for Event {
         size
     }
 }
+
+
+impl EventArgs {
+    pub fn is_complex(&self) -> bool {
+        matches!(
+            self,
+            Self::Execve { .. } | Self::Start { .. } | Self::Exit
+        )
+    }
+}
