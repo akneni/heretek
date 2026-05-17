@@ -74,7 +74,7 @@ fn daemon(config: &Config) {
         bpf::BpfEventArrayReader::from_pinned_path("/sys/fs/bpf/heretek-maps/events").unwrap();
 
     let mut events = vec![];
-    let mut pgraph_db = PGraph::new();
+    let mut pgraph_db = PGraph::from_existing_processes();
 
     let iter_interval = Duration::from_micros(50_000);
 

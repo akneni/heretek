@@ -1,6 +1,7 @@
-use std::collections::{HashMap, HashSet, VecDeque};
-
-use anyhow::Result;
+use std::{
+    collections::{HashMap, HashSet, VecDeque},
+    fs, io,
+};
 
 use crate::pgraph::{Actor, ActorTuid};
 
@@ -41,6 +42,74 @@ impl PGraph {
         }
     }
 
+    /// Scans the /proc directory and constructs the Pgraph (in a best effort manner)
+    /// It will assume that the parent ID of a process is the creator ID.
+    pub fn from_existing_processes() -> Self {
+        let mut pgraph = Self::new();
+        let hz = match clock_ticks_per_second() {
+            Ok(hz) => hz,
+            Err(_) => return pgraph,
+        };
+
+        let proc_entries = match fs::read_dir("/proc") {
+            Ok(entries) => entries,
+            Err(_) => return pgraph,
+        };
+
+        let mut processes = Vec::new();
+
+        for entry in proc_entries.flatten() {
+            let file_name = entry.file_name();
+            let Some(file_name) = file_name.to_str() else {
+                continue;
+            };
+
+            let Ok(pid) = file_name.parse::<i32>() else {
+                continue;
+            };
+
+            let Ok((ppid, start_ktime)) = read_proc_stat(pid, hz) else {
+                continue;
+            };
+
+            let actor = Actor::new(pid, start_ktime);
+            pgraph
+                .pid_map
+                .entry(pid)
+                .or_default()
+                .push_back(start_ktime);
+            processes.push((actor, ppid));
+        }
+
+        let pid_to_tuid = processes
+            .iter()
+            .map(|(actor, _)| (actor.id.pid, actor.id))
+            .collect::<HashMap<_, _>>();
+
+        let mut child_edges = Vec::new();
+
+        for (actor, ppid) in processes {
+            let actor_tuid = actor.id;
+            let creator_tuid = pid_to_tuid.get(&ppid).copied();
+
+            if let Some(creator_tuid) = creator_tuid {
+                child_edges.push((creator_tuid, actor_tuid));
+            }
+
+            pgraph
+                .actors
+                .insert(actor_tuid, PGraphNode::new(actor, creator_tuid));
+        }
+
+        for (creator_tuid, child_tuid) in child_edges {
+            if let Some(creator) = pgraph.actors.get_mut(&creator_tuid) {
+                creator.child_tuids.insert(child_tuid);
+            }
+        }
+
+        pgraph
+    }
+
     /// Returns the most recent actor with the PID passed
     /// Note, this does not guarantee that the actor is alive
     pub fn get_latest_mut(&mut self, pid: i32) -> Option<&mut PGraphNode> {
@@ -49,19 +118,22 @@ impl PGraph {
         self.actors.get_mut(&tuid)
     }
 
-    /// Returns the Node whose actor has the same PID as the one passed and the lastest start time 
-    /// that comes before the start time passed. 
+    /// Returns the Node whose actor has the same PID as the one passed and the lastest start time
+    /// that comes before the start time passed.
     pub fn get_latest_prior_mut(&mut self, pid: i32, ktime: u64) -> Option<&mut PGraphNode> {
         let ktime_vec = self.pid_map.get(&pid)?;
         let mut real_ktime = None;
         for &kt in ktime_vec.iter().rev() {
             if kt < ktime {
                 real_ktime = Some(kt);
-                break ;
+                break;
             }
         }
 
-        let tuid = ActorTuid {pid, start_ktime: real_ktime.unwrap()};
+        let tuid = ActorTuid {
+            pid,
+            start_ktime: real_ktime.unwrap(),
+        };
         self.actors.get_mut(&tuid)
     }
 
@@ -83,4 +155,41 @@ impl PGraph {
             PGraphNode::new(actor, None)
         })
     }
+}
+
+fn read_proc_stat(pid: i32, hz: u64) -> io::Result<(i32, u64)> {
+    let stat = fs::read_to_string(format!("/proc/{pid}/stat"))?;
+    let after_comm = stat
+        .rsplit_once(") ")
+        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "bad /proc stat format"))?
+        .1;
+
+    let fields = after_comm.split_whitespace().collect::<Vec<_>>();
+    if fields.len() <= 19 {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "missing /proc stat fields",
+        ));
+    }
+
+    let ppid = fields[1]
+        .parse::<i32>()
+        .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "invalid ppid field"))?;
+    let starttime_ticks = fields[19]
+        .parse::<u64>()
+        .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "invalid starttime field"))?;
+
+    Ok((ppid, starttime_ticks.saturating_mul(1_000_000_000) / hz))
+}
+
+fn clock_ticks_per_second() -> io::Result<u64> {
+    let hz = unsafe { libc::sysconf(libc::_SC_CLK_TCK) };
+    if hz <= 0 {
+        return Err(io::Error::new(
+            io::ErrorKind::Other,
+            "sysconf(_SC_CLK_TCK) failed",
+        ));
+    }
+
+    Ok(hz as u64)
 }

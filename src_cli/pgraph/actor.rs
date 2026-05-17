@@ -218,7 +218,12 @@ impl Actor {
 /// if there is a vioilation the actor has been deemed malicious. 
 impl Actor {
     pub fn handle_openat(&mut self, fpath: String, mode: AccessType) -> bool {
-        let ffpath = fs::canonicalize(fpath).unwrap();
+        let ffpath = match fs::canonicalize(&fpath) {
+            Ok(r) => r,
+            Err(_e) => {
+                return false;
+            },
+        };
         let protectee = Protectee::File(ffpath);
 
         let entry = self.summary.events.entry(protectee);
