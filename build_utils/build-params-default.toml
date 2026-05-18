@@ -3,6 +3,6 @@
 
 
 # Size of the per-core ring buffers used to stream events from eBPF to the daemon. 
-# Note that this must be a multiple of two and be a minimum of 4. 
+# Note that is in terms of powers of 2. So 7 means that the ring buf size is (2^7) = 128
 RING_BUF_SIZE_LOG2=7
 

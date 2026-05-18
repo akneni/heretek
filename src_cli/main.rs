@@ -1,7 +1,6 @@
 use std::os::unix::net::UnixListener;
 use std::{
-    fs,
-    process, thread,
+    fs, process, thread,
     time::{Duration, Instant},
 };
 
@@ -12,19 +11,18 @@ use crate::pgraph::PGraph;
 use crate::rpc::{RpcResult, StreamSendable};
 use crate::uinterf::CliCommand;
 use crate::{
-    uinterf::{Config, ConfigFile},
     detection::{Acl, AclJsonFile},
+    uinterf::{Config, ConfigFile},
 };
 
 mod bpf;
-mod uinterf;
 mod detection;
 mod pgraph;
 mod rpc;
+mod uinterf;
 
 mod build_params;
 mod utils;
-
 
 fn preflight() -> Result<Config> {
     if "root" != whoami::account()? {
@@ -51,8 +49,6 @@ fn preflight() -> Result<Config> {
 
     Ok(cfg)
 }
-
-
 
 fn daemon(config: &Config) {
     let proj = ProjectDirs::from("com", "heretek", "heretek").unwrap();
@@ -90,16 +86,13 @@ fn daemon(config: &Config) {
         }
         events = vec![];
 
- 
-
         // 3) Check for IPC RPCs from CLI invocations of this tool (like `htek desc <pid>`)
         if let Err(e) = rpc::handle_rpc(&socket, &mut pgraph_db) {
             eprintln!("Error processing RPC: {e}");
         }
 
-
         // 4) Sleep for an alloted amount of time.
-        println!("Time Elapsed: {:?}", timer.elapsed());
+        // println!("Time Elapsed: {:?}", timer.elapsed());
         let te = timer.elapsed().as_millis() as u64;
         let iter_interval_us = iter_interval.as_millis() as u64;
         if te >= iter_interval_us {
@@ -122,7 +115,6 @@ fn main() {
         }
     };
 
-
     let cli_cmd = uinterf::parse_cli();
 
     match cli_cmd {
@@ -131,7 +123,7 @@ fn main() {
         }
         CliCommand::SummaryPid { pid } => {
             let stream = rpc::connect_uds_ipc(&config);
-            let rpc = rpc::Rpc::GetSummaryPid{pid};
+            let rpc = rpc::Rpc::GetSummaryPid { pid };
             rpc.stream_send(&stream).unwrap();
             let rpc_res = RpcResult::stream_recv(&stream).unwrap();
             match rpc_res {
@@ -142,12 +134,20 @@ fn main() {
                     unreachable!();
                 }
             }
-        
         }
         CliCommand::SummaryExe { exe_path } => {
-            unimplemented!("unimplemented");
+            let stream = rpc::connect_uds_ipc(&config);
+            let rpc = rpc::Rpc::GetSummaryExe { exe_path };
+            rpc.stream_send(&stream).unwrap();
+            let rpc_res = RpcResult::stream_recv(&stream).unwrap();
+            match rpc_res {
+                rpc::RpcResult::GetSummary(s) => {
+                    println!("{}", s);
+                }
+                _ => {
+                    unreachable!();
+                }
+            }
         }
     }
-
-
 }

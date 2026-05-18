@@ -1,14 +1,26 @@
-use std::mem;
+use std::fmt;
 
-use anyhow::{Result, bail};
+use anyhow::{bail, Result};
 
-use crate::{bpf::CEvent, bpf::event_types, utils::TotalMem};
+use crate::{bpf::event_types, bpf::CEvent};
 
-#[derive(Debug, Clone, Copy, Hash)]
+#[derive(Clone, Copy, Hash)]
 pub struct AccessType {
     read: bool,
     write: bool,
     execute: bool,
+}
+
+impl fmt::Debug for AccessType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mode = [
+            if self.read { 'r' } else { '-' },
+            if self.write { 'w' } else { '-' },
+            if self.execute { 'x' } else { '-' },
+        ];
+
+        write!(f, "AccessType(\"{}{}{}\")", mode[0], mode[1], mode[2])
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -96,12 +108,6 @@ impl AccessType {
     }
 }
 
-impl TotalMem for AccessType {
-    fn total_mem(&self) -> usize {
-        mem::size_of::<Self>()
-    }
-}
-
 impl Default for AccessType {
     fn default() -> Self {
         Self {
@@ -159,41 +165,8 @@ impl Event {
     }
 }
 
-impl TotalMem for Event {
-    fn total_mem(&self) -> usize {
-        let mut size = mem::size_of::<Self>();
-        match &self.args {
-            EventArgs::Execve { binary } => {
-                size += binary.len();
-            }
-            EventArgs::Openat { fpath, .. } => {
-                size += fpath.len();
-            }
-            EventArgs::Mmap { fpath, .. } => {
-                if let Some(fpath) = fpath {
-                    size += fpath.len();
-                }
-            }
-            EventArgs::Rename { src, dst } => {
-                size += src.len();
-                size += dst.len();
-            }
-            EventArgs::Exit => {}
-            EventArgs::Start {
-                #[allow(unused)]
-                creator_pid,
-            } => {}
-        }
-        size
-    }
-}
-
-
 impl EventArgs {
     pub fn is_complex(&self) -> bool {
-        matches!(
-            self,
-            Self::Execve { .. } | Self::Start { .. } | Self::Exit
-        )
+        matches!(self, Self::Start { .. } | Self::Exit)
     }
 }

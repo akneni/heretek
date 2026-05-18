@@ -29,11 +29,11 @@ pub struct CEvent {
 
 #[repr(C)]
 #[derive(Clone, Copy)]
-struct EventSlot {
+struct CEventSlot {
     bytes: [u8; size_of::<CEvent>()],
 }
 
-unsafe impl Pod for EventSlot {}
+unsafe impl Pod for CEventSlot {}
 
 impl CEvent {
     unsafe fn from_bytes(bytes: &[u8]) -> &Self {
@@ -54,7 +54,7 @@ impl CEvent {
 }
 
 pub struct BpfEventArrayReader {
-    map: PerCpuArray<MapData, EventSlot>,
+    map: PerCpuArray<MapData, CEventSlot>,
     tails: Vec<u64>,
 }
 
@@ -120,7 +120,7 @@ impl BpfEventArrayReader {
     }
 }
 
-fn parse_head(slot: &EventSlot) -> Result<u64, Box<dyn Error>> {
+fn parse_head(slot: &CEventSlot) -> Result<u64, Box<dyn Error>> {
     let bytes: [u8; size_of::<u64>()] = slot
         .bytes
         .get(..size_of::<u64>())

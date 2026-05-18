@@ -1,4 +1,8 @@
-use std::{collections::HashMap, fs, io, mem};
+use std::{
+    collections::HashMap,
+    fs, io, mem,
+    path::{Path, PathBuf},
+};
 
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
@@ -6,7 +10,6 @@ use serde::{Deserialize, Serialize};
 use crate::{
     detection::{Acl, Profile, Protectee},
     pgraph::{AccessType, Event, EventArgs},
-    utils::TotalMem,
 };
 
 /// Actor Temporally Unique ID
@@ -35,9 +38,19 @@ pub struct ActorSummary {
 #[derive(Debug, Clone)]
 pub struct ActorMd {
     pub state: ActorState,
-    pub binary: Option<String>,
-    pub profile: Option<Profile>,
-    pub argv: Option<Vec<String>>,
+
+    // This is the list of all binaries this process has ever executed as. If this list is `n`
+    // elements long, that that means the process has executed execve `n` times.
+    // The last element of this vector is the current binary the process is executing as.
+    pub binary: Vec<PathBuf>,
+
+    // This is the CLI arguments of the
+    pub argv: Vec<Option<Vec<String>>>,
+
+    // This is the set of all unique profiles that this process has ever had.
+    // If multiple binaries executed with the same profile, then this list will be less than `n`
+    // elements log
+    pub profile: Vec<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -48,56 +61,22 @@ pub struct Actor {
     pub actor_md: ActorMd,
 }
 
-impl TotalMem for ActorState {
-    fn total_mem(&self) -> usize {
-        mem::size_of::<Self>()
-    }
-}
-
-impl TotalMem for ActorHist {
-    fn total_mem(&self) -> usize {
-        let mut size = mem::size_of::<Self>();
-        size += self.events.capacity() * mem::size_of::<Event>();
-        for event in &self.events {
-            size += event.total_mem().saturating_sub(mem::size_of::<Event>());
+impl ActorMd {
+    fn new() -> Self {
+        Self {
+            state: ActorState::Running,
+            binary: vec![],
+            profile: vec![],
+            argv: vec![],
         }
-        size
     }
-}
 
-impl TotalMem for ActorSummary {
-    fn total_mem(&self) -> usize {
-        let mut size = mem::size_of::<Self>();
-        size += self.events.capacity() * mem::size_of::<(Protectee, AccessType)>();
-        size
-    }
-}
-
-impl TotalMem for Actor {
-    fn total_mem(&self) -> usize {
-        let mut size = mem::size_of::<Self>();
-
-        if let Some(binary) = &self.actor_md.binary {
-            size += binary.len();
-        }
-
-        if let Some(argv) = &self.actor_md.argv {
-            size += argv.capacity() * mem::size_of::<String>();
-            for arg in argv {
-                size += arg.len();
-            }
-        }
-
-        size += self
-            .events
-            .total_mem()
-            .saturating_sub(mem::size_of::<ActorHist>());
-        size += self
-            .summary
-            .total_mem()
-            .saturating_sub(mem::size_of::<ActorSummary>());
-
-        size
+    /// Returns a vector of paths to the fils responsible for executing code for each execve call
+    /// For exammple
+    /// `/usr/bin/evil_binary arg1 arg2`                 -> `/usr/bin/evil_binary`
+    /// `/usr/bin/python /tmp/evil_script.py arg1 arg2`  -> `/tmp/evil_script.py`
+    pub fn get_actors(&self) -> Vec<PathBuf> {
+        unimplemented!();
     }
 }
 
@@ -108,28 +87,15 @@ impl ActorSummary {
     }
 }
 
-
 /// This block of implemtnations are generic helpers for this type
 impl Actor {
     pub fn new(pid: i32, start_time: u64) -> Self {
-        let comm = match fs::canonicalize(&format!("/proc/{}/exe", pid)) {
-            Ok(r) => Some(r.to_str().unwrap().to_string()),
-            Err(_e) => None,
-        };
-
-        let actor_md = ActorMd {
-            state: ActorState::Running,
-            binary: comm.clone(),
-            profile: comm.map(|b| Profile::Binary(b)),
-            argv: Self::get_cmdline(pid).map(|x| Some(x)).unwrap_or(None),
-        };
-
         Self {
             id: ActorTuid {
                 pid,
                 start_ktime: start_time,
             },
-            actor_md: actor_md,
+            actor_md: ActorMd::new(),
             events: ActorHist { events: vec![] },
             summary: ActorSummary {
                 events: HashMap::new(),
@@ -142,28 +108,52 @@ impl Actor {
         Ok(Self::new(pid, ktime))
     }
 
+    /// This function is intended to be called for processes that were spawned before the htek
+    /// daemon. This will get the command and CLI arguments from /proc (as opposed to execve
+    /// events like normal)
+    pub fn bootstrap_md(&mut self) -> Result<()> {
+        if cfg!(debug_assertions) {
+            // It doesn't make sense to call this on a process we already have execve events frpm
+            assert_eq!(self.actor_md.binary.len(), 0);
+            assert_eq!(self.actor_md.profile.len(), 0);
+            assert_eq!(self.actor_md.argv.len(), 0);
+        }
+
+        let path_str = format!("/proc/{}/exe", self.id.pid);
+        let path = Path::new(&path_str);
+        let exe_path = fs::canonicalize(path)
+            .context("failed to get /proc/<pid>/exe (likely bc this is a kthread)")?;
+
+        let cmd_args = Self::get_cmdline(self.id.pid).ok();
+
+        self.actor_md.binary.push(exe_path);
+        self.actor_md.argv.push(cmd_args);
+
+        Ok(())
+    }
+
     /// Gets the parent PID (NOT the creator ID)
     fn get_ppid(&self) -> Result<i32> {
         let pid = self.id.pid;
-      let stat = fs::read_to_string(format!("/proc/{pid}/stat"))?;
+        let stat = fs::read_to_string(format!("/proc/{pid}/stat"))?;
 
-      // Format:
-      // pid (comm) state ppid ...
-      let after_comm = stat
-          .rsplit_once(") ")
-          .context("malformed /proc stat: missing process name terminator")?
-          .1;
+        // Format:
+        // pid (comm) state ppid ...
+        let after_comm = stat
+            .rsplit_once(") ")
+            .context("malformed /proc stat: missing process name terminator")?
+            .1;
 
-      let mut fields = after_comm.split_whitespace();
+        let mut fields = after_comm.split_whitespace();
 
-      let _state = fields.next().context("missing process state")?;
-      let ppid = fields
-          .next()
-          .context("missing parent pid")?
-          .parse::<i32>()
-          .context("invalid parent pid")?;
+        let _state = fields.next().context("missing process state")?;
+        let ppid = fields
+            .next()
+            .context("missing parent pid")?
+            .parse::<i32>()
+            .context("invalid parent pid")?;
 
-      Ok(ppid)
+        Ok(ppid)
     }
 
     /// User Space Kernel Time Get Boot Nanoseconds
@@ -212,17 +202,16 @@ impl Actor {
     }
 }
 
-
 /// This block of functoins are event handlers
 /// Each of these return a bool. It will be false if there are no violations and will be true
-/// if there is a vioilation the actor has been deemed malicious. 
+/// if there is a vioilation the actor has been deemed malicious.
 impl Actor {
     pub fn handle_openat(&mut self, fpath: String, mode: AccessType) -> bool {
         let ffpath = match fs::canonicalize(&fpath) {
             Ok(r) => r,
             Err(_e) => {
                 return false;
-            },
+            }
         };
         let protectee = Protectee::File(ffpath);
 
@@ -233,15 +222,29 @@ impl Actor {
         false
     }
 
-    pub fn handle_rename(&mut self, src: String, dest: String) -> bool {        
-        self.handle_openat(src, AccessType::from_rwx_str("rw-").unwrap()) ||
-        self.handle_openat(dest, AccessType::from_rwx_str("rw-").unwrap())
+    pub fn handle_rename(&mut self, src: String, dest: String) -> bool {
+        self.handle_openat(src, AccessType::from_rwx_str("rw-").unwrap())
+            || self.handle_openat(dest, AccessType::from_rwx_str("rw-").unwrap())
     }
 
     pub fn handle_mmap(&mut self, fpath: Option<String>, mode: AccessType) -> bool {
         if let Some(fpath) = fpath {
             return self.handle_openat(fpath, mode);
         }
+        false
+    }
+
+    pub fn handle_execve(&mut self, binary: String) -> bool {
+        let binary_path = match fs::canonicalize(&binary) {
+            Ok(r) => r,
+            _ => return false,
+        };
+
+        let args = Self::get_cmdline(self.id.pid).ok();
+
+        self.actor_md.binary.push(binary_path);
+        self.actor_md.argv.push(args);
+
         false
     }
 }

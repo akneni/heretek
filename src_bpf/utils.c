@@ -7,8 +7,6 @@
 #include <bpf/bpf_core_read.h>
 #include <stdbool.h>
 
-#define likely(cond)   __builtin_expect(!!(cond),1)
-#define unlikely(cond) __builtin_expect(!!(cond),0)
 
 static __always_inline bool bit_test(__u8 bitmap, __u8 idx) {
     return (bitmap & (0x01 << idx)) != 0;

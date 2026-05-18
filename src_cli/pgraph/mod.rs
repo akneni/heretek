@@ -2,16 +2,19 @@ mod actor;
 mod event;
 mod pgraph;
 
-use std::mem;
+use std::{fs, mem};
 
 pub use actor::*;
 pub use event::*;
 pub use pgraph::*;
 
-
-/// This is the bulk of this program. 
+/// This is the bulk of this program.
 /// It updates the Pgraph with the events and detects any violations
 pub fn handle_event(pgraph: &mut PGraph, event: Event) {
+    if matches!(event.args, EventArgs::Start { .. } | EventArgs::Exit) {
+        println!("Event: {:#?}\n\n", event);
+    }
+
     if event.args.is_complex() {
         handle_complex_event(pgraph, event);
     } else {
@@ -38,6 +41,9 @@ fn handle_simple_event(pgraph: &mut PGraph, event: Event) {
         EventArgs::Rename { src, dst } => {
             violation = node.actor.handle_rename(src, dst);
         }
+        EventArgs::Execve { binary } => {
+            violation = node.actor.handle_execve(binary);
+        }
         _ => {
             panic!("Not supported");
         }
@@ -48,12 +54,8 @@ fn handle_simple_event(pgraph: &mut PGraph, event: Event) {
     }
 }
 
-
 fn handle_complex_event(pgraph: &mut PGraph, event: Event) {
     match event.args {
-        EventArgs::Execve { binary } => {
-
-        }
         EventArgs::Start { creator_pid } => {
             let actor = Actor::new(event.pid, event.ktime);
             let creator_tuid = {

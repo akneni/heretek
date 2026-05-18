@@ -1,6 +1,7 @@
 mod ipc;
 mod uds_utils;
 
+use std::fmt::Write;
 use std::os::unix::net::UnixListener;
 
 use anyhow::Result;
@@ -9,8 +10,7 @@ pub use uds_utils::*;
 
 use crate::pgraph::PGraph;
 
-
-pub fn handle_rpc(socket: &UnixListener, actor_db: &mut PGraph) -> Result<()> {
+pub fn handle_rpc(socket: &UnixListener, pgraph_db: &mut PGraph) -> Result<()> {
     let mut stream = match socket.accept() {
         Ok((stream, _)) => stream,
         Err(_e) => {
@@ -23,14 +23,31 @@ pub fn handle_rpc(socket: &UnixListener, actor_db: &mut PGraph) -> Result<()> {
 
     match rpc {
         Rpc::GetSummaryExe { exe_path } => {
-            let res = RpcResult::GetSummary("unimplemented".to_string());
+            let mut payload = String::with_capacity(4096);
+
+            for (_, node) in pgraph_db.nodes.iter() {
+                let actor = &node.actor;
+                if let Some(bin) = actor.actor_md.binary.last() {
+                    let bin_str = bin.to_str().unwrap();
+                    if !bin_str.ends_with(&exe_path) {
+                        continue;
+                    }
+                    writeln!(&mut payload, "Binary: {:?}", bin).unwrap();
+                    writeln!(&mut payload, "Summary: {:#?}", actor.summary).unwrap();
+                    writeln!(&mut payload, "\n\n").unwrap();
+                }
+            }
+            if payload.len() == 0 {
+                payload.push_str("No actors found");
+            }
+            let res = RpcResult::GetSummary(payload);
             res.stream_send(&mut stream)?;
         }
         Rpc::GetSummaryPid { pid } => {
-            let res_json = match actor_db.get_latest_mut(pid) {
+            let res_json = match pgraph_db.get_latest_mut(pid) {
                 Some(r) => {
                     let actor = &r.actor;
-                    format!("{:?}", actor.summary)
+                    format!("{:#?}", actor)
                 }
                 None => {
                     format!("PID {} not found", pid)

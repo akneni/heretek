@@ -14,6 +14,8 @@
 #define O_RDWR 2
 #define O_ACCMODE 3
 
+#define SIGKILL 9
+
 #define EPERM 1
 #define LSM_ALLOW 0
 #define LSM_DENY (-EPERM)
@@ -26,7 +28,7 @@ int handle_openat(struct trace_event_raw_sys_enter *ctx) {
     int accmode;
 
     evt = reserve_event_slot();
-    if (!evt) {
+    if (unlikely(!evt)) {
         return 0;
     }
 
@@ -45,39 +47,18 @@ int handle_openat(struct trace_event_raw_sys_enter *ctx) {
     return 0;
 }
 
-SEC("lsm/task_kill")
-int handle_task_kill(
-    struct task_struct *p, struct kernel_siginfo *info,
-	int sig, const struct cred *cred
-) {
-    parameters *params = get_params();
-    // pid_t pid = p.;
-
-
-
-
-    if (
-        params &&
-        bit_test(params->flags, PARAM_FLG_IMMORTAL)
-    ) {
-        return LSM_DENY;
-    }
-
-    return LSM_ALLOW;
-}
-
 SEC("tracepoint/sched/sched_process_fork")
 int handle_process_fork(struct trace_event_raw_sched_process_fork *ctx) {
     event *evt = reserve_event_slot();
 
-    if (!evt) {
+    if (unlikely(!evt)) {
         return 0;
     }
 
     evt->event = GENE_START;
     evt->pid = ctx->child_pid;
     evt->ktime = bpf_ktime_get_tai_ns();
-    *(__s32 *)evt->spare = ctx->parent_pid;
+    ((__s32*)evt->spare)[0] = ctx->parent_pid;
     return 0;
 }
 
@@ -86,7 +67,9 @@ int handle_process_exec(struct trace_event_raw_sched_process_exec *ctx) {
     event *evt = reserve_event_slot();
     const char *filename;
 
-    if (!evt) {
+    if (unlikely(!evt)) {
+        bpf_printk("Killing process(PID=%d) (ring-buf full)\n", ctx->pid);
+        bpf_send_signal(SIGKILL);
         return 0;
     }
 
@@ -102,7 +85,7 @@ SEC("tracepoint/sched/sched_process_exit")
 int handle_process_exit(struct trace_event_raw_sched_process_template *ctx) {
     event *evt = reserve_event_slot();
 
-    if (!evt) {
+    if (unlikely(!evt)) {
         return 0;
     }
 

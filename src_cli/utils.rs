@@ -1,7 +1,3 @@
-pub trait TotalMem {
-    fn total_mem(&self) -> usize;
-}
-
 #[inline]
 pub fn bit_test(bitmap: u8, idx: u8) -> bool {
     (bitmap & (0x01 << idx)) != 0

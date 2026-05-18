@@ -18,7 +18,7 @@ pub struct PGraphNode {
 /// This is the main structure that holds the graph of all the processes.
 pub struct PGraph {
     // This is where all the actual actor objects are stored
-    actors: HashMap<ActorTuid, PGraphNode>,
+    pub nodes: HashMap<ActorTuid, PGraphNode>,
 
     // This maps every pid to the ktime (kernel start time) of all processes that have had this PID
     pid_map: HashMap<i32, VecDeque<u64>>,
@@ -37,7 +37,7 @@ impl PGraphNode {
 impl PGraph {
     pub fn new() -> Self {
         PGraph {
-            actors: HashMap::new(),
+            nodes: HashMap::new(),
             pid_map: HashMap::new(),
         }
     }
@@ -72,7 +72,13 @@ impl PGraph {
                 continue;
             };
 
-            let actor = Actor::new(pid, start_ktime);
+            let mut actor = Actor::new(pid, start_ktime);
+            if let Err(_e) = actor.bootstrap_md() {
+                // If this happens, its likely because the /proc/pid directory was for a kthread
+                // rather than a userspace process
+                continue;
+            }
+
             pgraph
                 .pid_map
                 .entry(pid)
@@ -97,16 +103,15 @@ impl PGraph {
             }
 
             pgraph
-                .actors
+                .nodes
                 .insert(actor_tuid, PGraphNode::new(actor, creator_tuid));
         }
 
         for (creator_tuid, child_tuid) in child_edges {
-            if let Some(creator) = pgraph.actors.get_mut(&creator_tuid) {
+            if let Some(creator) = pgraph.nodes.get_mut(&creator_tuid) {
                 creator.child_tuids.insert(child_tuid);
             }
         }
-
         pgraph
     }
 
@@ -115,7 +120,7 @@ impl PGraph {
     pub fn get_latest_mut(&mut self, pid: i32) -> Option<&mut PGraphNode> {
         let start_ktime = *self.pid_map.get(&pid)?.iter().last()?;
         let tuid = ActorTuid { pid, start_ktime };
-        self.actors.get_mut(&tuid)
+        self.nodes.get_mut(&tuid)
     }
 
     /// Returns the Node whose actor has the same PID as the one passed and the lastest start time
@@ -134,7 +139,7 @@ impl PGraph {
             pid,
             start_ktime: real_ktime.unwrap(),
         };
-        self.actors.get_mut(&tuid)
+        self.nodes.get_mut(&tuid)
     }
 
     /// Inserts the actor into the PGraph data structure
@@ -145,11 +150,11 @@ impl PGraph {
         let creator = self.get_or_create(creator_tuid);
 
         creator.child_tuids.insert(pnode.actor.id);
-        self.actors.insert(pnode.actor.id, pnode);
+        self.nodes.insert(pnode.actor.id, pnode);
     }
 
     fn get_or_create(&mut self, tuid: ActorTuid) -> &mut PGraphNode {
-        let entry = self.actors.entry(tuid);
+        let entry = self.nodes.entry(tuid);
         entry.or_insert_with(|| {
             let actor = Actor::new(tuid.pid, tuid.start_ktime);
             PGraphNode::new(actor, None)
