@@ -103,33 +103,22 @@ impl Actor {
         }
     }
 
-    fn new_infer_ktime(pid: i32) -> Result<Self> {
-        let ktime = Self::usrsp_ktime_get_boot_ns(pid)?;
-        Ok(Self::new(pid, ktime))
-    }
-
     /// This function is intended to be called for processes that were spawned before the htek
     /// daemon. This will get the command and CLI arguments from /proc (as opposed to execve
     /// events like normal)
-    pub fn bootstrap_md(&mut self) -> Result<()> {
-        if cfg!(debug_assertions) {
-            // It doesn't make sense to call this on a process we already have execve events frpm
-            assert_eq!(self.actor_md.binary.len(), 0);
-            assert_eq!(self.actor_md.profile.len(), 0);
-            assert_eq!(self.actor_md.argv.len(), 0);
-        }
-
-        let path_str = format!("/proc/{}/exe", self.id.pid);
-        let path = Path::new(&path_str);
-        let exe_path = fs::canonicalize(path)
+    pub fn new_bootstrap_md(pid: i32, start_time: u64) -> Result<Self> {
+        let path_str = format!("/proc/{}/exe", pid);
+        let exe_path = fs::canonicalize(&path_str)
             .context("failed to get /proc/<pid>/exe (likely bc this is a kthread)")?;
 
-        let cmd_args = Self::get_cmdline(self.id.pid).ok();
+        let cmd_args = Self::get_cmdline(pid).ok();
 
-        self.actor_md.binary.push(exe_path);
-        self.actor_md.argv.push(cmd_args);
+        let mut actor = Self::new(pid, start_time);
 
-        Ok(())
+        actor.actor_md.binary.push(exe_path);
+        actor.actor_md.argv.push(cmd_args);
+
+        Ok(actor)
     }
 
     /// Gets the parent PID (NOT the creator ID)

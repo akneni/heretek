@@ -72,12 +72,14 @@ impl PGraph {
                 continue;
             };
 
-            let mut actor = Actor::new(pid, start_ktime);
-            if let Err(_e) = actor.bootstrap_md() {
-                // If this happens, its likely because the /proc/pid directory was for a kthread
-                // rather than a userspace process
-                continue;
-            }
+            let actor = match Actor::new_bootstrap_md(pid, start_ktime) {
+                Ok(r) => r,
+                Err(_e) => {
+                    // If this happens, its likely because the /proc/pid directory was for a kthread
+                    // rather than a userspace process
+                    continue;
+                }
+            };
 
             pgraph
                 .pid_map
