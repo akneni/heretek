@@ -1,8 +1,8 @@
 use std::fmt;
 
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 
-use crate::{bpf::event_types, bpf::CEvent};
+use crate::{bpf::CEvent, bpf::event_types};
 
 #[derive(Clone, Copy, Hash)]
 pub struct AccessType {
@@ -152,7 +152,10 @@ impl Event {
             event_types::SYSCALL_EXECVE => EventArgs::Execve {
                 binary: c_event.fpath_str(1)?,
             },
-            event_types::GENE_START => EventArgs::Start { creator_pid: 0 },
+            event_types::GENE_START => {
+                let creator_pid = c_event.get_spare::<i32>(0);
+                EventArgs::Start { creator_pid }
+            }
             event_types::GENE_EXIT => EventArgs::Exit,
             _ => bail!("unsupported event"),
         };

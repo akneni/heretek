@@ -1,7 +1,7 @@
-use std::io;
 use std::mem::size_of;
 use std::path::Path;
 use std::{error::Error, slice};
+use std::{io, mem};
 
 use anyhow::{Result, bail};
 use aya::{
@@ -50,6 +50,18 @@ impl CEvent {
         let idx = fp_ref.iter().position(|&i| i == 0).unwrap_or(256);
         let sl = unsafe { slice::from_raw_parts(fp_ref.as_ptr() as *const u8, idx) };
         Ok(String::from_utf8(sl.to_vec())?)
+    }
+
+    pub fn get_spare<T: Sized + Copy>(&self, idx: usize) -> T {
+        // Bounds check
+        assert!((idx + 1) * mem::size_of::<T>() <= mem::size_of_val(&self.spare));
+
+        unsafe {
+            let space_ptr: *const u8 = &self.spare as *const u8;
+            let mut space_ptr: *const T = space_ptr as *const T;
+            space_ptr = space_ptr.add(idx);
+            *space_ptr
+        }
     }
 }
 

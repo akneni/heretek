@@ -21,7 +21,7 @@ pub struct PGraph {
     pub nodes: HashMap<ActorTuid, PGraphNode>,
 
     // This maps every pid to the ktime (kernel start time) of all processes that have had this PID
-    pid_map: HashMap<i32, VecDeque<u64>>,
+    pub pid_map: HashMap<i32, VecDeque<u64>>,
 }
 
 impl PGraphNode {

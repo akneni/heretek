@@ -5,6 +5,7 @@ use std::{
 };
 
 use anyhow::{Result, bail};
+use aya::sys::SyscallError;
 use directories::ProjectDirs;
 
 use crate::pgraph::PGraph;
@@ -66,8 +67,19 @@ fn daemon(config: &Config) {
     let socket = rpc::create_uds_ipc(&config);
     socket.set_nonblocking(true).unwrap();
 
-    let mut reader =
-        bpf::BpfEventArrayReader::from_pinned_path("/sys/fs/bpf/heretek-maps/events").unwrap();
+    let reader = bpf::BpfEventArrayReader::from_pinned_path("/sys/fs/bpf/heretek-maps/events");
+    let mut reader = match reader {
+        Ok(r) => r,
+        Err(e) => {
+            let err_str = format!("{:?}", e);
+            if err_str.contains("code: 2") && err_str.contains("No such file or directory") {
+                eprintln!("The BPF map is not loaded");
+            } else {
+                eprintln!("Unknown error accessing the bpf map: {:?}", e);
+            }
+            std::process::exit(1);
+        }
+    };
 
     let mut events = vec![];
     let mut pgraph_db = PGraph::from_existing_processes();

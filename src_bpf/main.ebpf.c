@@ -55,6 +55,12 @@ int handle_process_fork(struct trace_event_raw_sched_process_fork *ctx) {
         return 0;
     }
 
+    char *parent_comm = (char *)ctx + (ctx->__data_loc_parent_comm & 0xffff);
+    char *child_comm  = (char *)ctx + (ctx->__data_loc_child_comm & 0xffff);
+
+    bpf_printk("(parent_comm = %s (PID = %d)) (child_comm = %s (PID = %d))\n",
+        parent_comm, ctx->parent_pid, child_comm, ctx->child_pid);
+
     evt->event = GENE_START;
     evt->pid = ctx->child_pid;
     evt->ktime = bpf_ktime_get_tai_ns();
@@ -68,8 +74,6 @@ int handle_process_exec(struct trace_event_raw_sched_process_exec *ctx) {
     const char *filename;
 
     if (unlikely(!evt)) {
-        bpf_printk("Killing process(PID=%d) (ring-buf full)\n", ctx->pid);
-        bpf_send_signal(SIGKILL);
         return 0;
     }
 
@@ -82,7 +86,7 @@ int handle_process_exec(struct trace_event_raw_sched_process_exec *ctx) {
 }
 
 SEC("tracepoint/sched/sched_process_exit")
-int handle_process_exit(struct trace_event_raw_sched_process_template *ctx) {
+int handle_process_exit(struct trace_event_raw_sched_process_exit *ctx) {
     event *evt = reserve_event_slot();
 
     if (unlikely(!evt)) {

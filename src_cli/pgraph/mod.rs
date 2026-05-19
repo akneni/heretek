@@ -11,10 +11,6 @@ pub use pgraph::*;
 /// This is the bulk of this program.
 /// It updates the Pgraph with the events and detects any violations
 pub fn handle_event(pgraph: &mut PGraph, event: Event) {
-    if matches!(event.args, EventArgs::Start { .. } | EventArgs::Exit) {
-        println!("Event: {:#?}\n\n", event);
-    }
-
     if event.args.is_complex() {
         handle_complex_event(pgraph, event);
     } else {
@@ -59,10 +55,18 @@ fn handle_complex_event(pgraph: &mut PGraph, event: Event) {
         EventArgs::Start { creator_pid } => {
             let actor = Actor::new(event.pid, event.ktime);
             let creator_tuid = {
-                let creator_node = match pgraph.get_latest_prior_mut(event.pid, event.ktime) {
+                let creator_node = match pgraph.get_latest_prior_mut(creator_pid, event.ktime) {
                     Some(r) => r,
-                    None => return,
+                    None => {
+                        eprintln!("START get_latest_prior_mut Failed for ({:?})", (event));
+                        eprintln!("{:?}\n\n", pgraph.pid_map.get(&creator_pid));
+                        return;
+                    }
                 };
+                println!(
+                    "Actor Started: Parent Actor {:#?}\n\n\nChild Actor: {:#?}",
+                    creator_node.actor, actor
+                );
 
                 creator_node.actor.id
             };
@@ -71,9 +75,15 @@ fn handle_complex_event(pgraph: &mut PGraph, event: Event) {
         EventArgs::Exit => {
             let node = match pgraph.get_latest_prior_mut(event.pid, event.ktime) {
                 Some(r) => r,
-                None => return,
+                None => {
+                    eprintln!("EXIT get_latest_prior_mut Failed for ({:?})", (event));
+                    eprintln!("{:?}\n\n", pgraph.pid_map.get(&event.pid));
+                    return;
+                }
             };
             node.actor.actor_md.state = ActorState::Exited;
+
+            println!("Actor Exited: {:#?}\n\n", node.actor);
         }
         _ => {
             panic!("Not supported");
