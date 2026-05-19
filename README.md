@@ -14,7 +14,7 @@
 - The main loop for the daemon will be doing 4 things in sequence perpetually. 
     1) Drain the ring buffers and update it's internal pgraph structure with the events just pulled
     2) Run checks against the ACL to check for violations
-    3) Check for IPC RPCs from CLI invocations of this tool (like `htek desc <pid>`)
+    3) Check for IPC RPCs from CLI invocations of this tool (like `htek summary <pid>`)
     4) Sleep for an alloted amount of time. 
 
 ### Process Model
