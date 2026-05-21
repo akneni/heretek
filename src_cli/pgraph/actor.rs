@@ -145,6 +145,31 @@ impl Actor {
         Ok(ppid)
     }
 
+    /// Used for debugging
+    pub fn curr_bin_to_str(&self) -> String {
+        let mut s = format!("(PID = {}) ", self.id.pid);
+
+        match self.actor_md.binary.last() {
+            Some(r) => {
+                let r_str = r.to_str().unwrap();
+                s.push_str(r_str);
+                s.push(' ');
+            }
+            None => {
+                s.push_str("[binary unkown] ");
+            }
+        }
+
+        let argv = self.actor_md.argv.last();
+        if let Some(argv) = argv {
+            if let Some(argv) = argv {
+                let argv = argv[1..].join(" ");
+                s.push_str(&argv);
+            }
+        }
+        s
+    }
+
     /// User Space Kernel Time Get Boot Nanoseconds
     /// This returns a timer that has the same semantics as bpf_ktime_get_boot_ns()
     fn usrsp_ktime_get_boot_ns(pid: i32) -> io::Result<u64> {

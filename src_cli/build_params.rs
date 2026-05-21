@@ -1,1 +1,1 @@
-pub const RING_BUF_SIZE_LOG2: usize = 7;
+pub const RING_BUF_SIZE_LOG2: usize = 10;

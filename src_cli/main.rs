@@ -91,6 +91,7 @@ fn daemon(config: &Config) {
 
         // 1) Drain the ring buffers and update it's internal pgraph structure with the events just pulled
         reader.poll(&mut events).unwrap();
+        events.sort_by_key(|x| x.ktime);
 
         // 2) Run checks against the ACL to check for violations
         for event in events.into_iter() {
@@ -103,18 +104,18 @@ fn daemon(config: &Config) {
             eprintln!("Error processing RPC: {e}");
         }
 
-        // 4) Sleep for an alloted amount of time.
-        // println!("Time Elapsed: {:?}", timer.elapsed());
-        let te = timer.elapsed().as_millis() as u64;
-        let iter_interval_us = iter_interval.as_millis() as u64;
-        if te >= iter_interval_us {
-            continue;
-        } else {
-            let time_left_us = iter_interval_us - te;
-            if time_left_us > 1000 {
-                thread::sleep(Duration::from_millis(time_left_us));
-            }
-        }
+        // // 4) Sleep for an alloted amount of time.
+        // // println!("Time Elapsed: {:?}", timer.elapsed());
+        // let te = timer.elapsed().as_millis() as u64;
+        // let iter_interval_us = iter_interval.as_millis() as u64;
+        // if te >= iter_interval_us {
+        //     continue;
+        // } else {
+        //     let time_left_us = iter_interval_us - te;
+        //     if time_left_us > 1000 {
+        //         thread::sleep(Duration::from_millis(time_left_us));
+        //     }
+        // }
     }
 }
 

@@ -147,11 +147,17 @@ impl PGraph {
     /// Inserts the actor into the PGraph data structure
     /// This makes sure to update the creator PGraphNode and pid_map to keep everything consistent
     pub fn insert_actor(&mut self, actor: Actor, creator_tuid: ActorTuid) {
-        let pnode = PGraphNode::new(actor, Some(creator_tuid));
-
+        // Update creator's child vec
         let creator = self.get_or_create(creator_tuid);
+        creator.child_tuids.insert(actor.id);
 
-        creator.child_tuids.insert(pnode.actor.id);
+        // Update pid map
+        let entry = self.pid_map.entry(actor.id.pid);
+        let ktimes = entry.or_default();
+        ktimes.push_back(actor.id.start_ktime);
+
+        // Insert actor into the nodes map
+        let pnode = PGraphNode::new(actor, Some(creator_tuid));
         self.nodes.insert(pnode.actor.id, pnode);
     }
 

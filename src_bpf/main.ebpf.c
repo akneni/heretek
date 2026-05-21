@@ -38,7 +38,7 @@ int handle_openat(struct trace_event_raw_sys_enter *ctx) {
 
     evt->event = SYSCALL_OPENAT;
     evt->pid = (__s32)(bpf_get_current_pid_tgid() >> 32);
-    evt->ktime = bpf_ktime_get_tai_ns();
+    evt->ktime = bpf_ktime_get_boot_ns();
     if (likely(filename != 0)) {
         bpf_probe_read_user_str(evt->fpath1, sizeof(evt->fpath1), filename);
     }
@@ -55,16 +55,10 @@ int handle_process_fork(struct trace_event_raw_sched_process_fork *ctx) {
         return 0;
     }
 
-    char *parent_comm = (char *)ctx + (ctx->__data_loc_parent_comm & 0xffff);
-    char *child_comm  = (char *)ctx + (ctx->__data_loc_child_comm & 0xffff);
-
-    bpf_printk("(parent_comm = %s (PID = %d)) (child_comm = %s (PID = %d))\n",
-        parent_comm, ctx->parent_pid, child_comm, ctx->child_pid);
-
     evt->event = GENE_START;
     evt->pid = ctx->child_pid;
-    evt->ktime = bpf_ktime_get_tai_ns();
-    ((__s32*)evt->spare)[0] = ctx->parent_pid;
+    evt->ktime = bpf_ktime_get_boot_ns();
+    ((__s32*)evt->spare)[0] = (__s32)(bpf_get_current_pid_tgid() >> 32);
     return 0;
 }
 
@@ -78,8 +72,8 @@ int handle_process_exec(struct trace_event_raw_sched_process_exec *ctx) {
     }
 
     evt->event = SYSCALL_EXECVE;
-    evt->pid = ctx->pid;
-    evt->ktime = bpf_ktime_get_tai_ns();
+    evt->pid = (__s32)(bpf_get_current_pid_tgid() >> 32);
+    evt->ktime = bpf_ktime_get_boot_ns();
     filename = tracepoint_dyn_str(ctx, ctx->__data_loc_filename);
     bpf_probe_read_kernel_str(evt->fpath1, sizeof(evt->fpath1), filename);
     return 0;
@@ -94,8 +88,8 @@ int handle_process_exit(struct trace_event_raw_sched_process_exit *ctx) {
     }
 
     evt->event = GENE_EXIT;
-    evt->pid = ctx->pid;
-    evt->ktime = bpf_ktime_get_tai_ns();
+    evt->pid = (__s32)(bpf_get_current_pid_tgid() >> 32);
+    evt->ktime = bpf_ktime_get_boot_ns();
     return 0;
 }
 
