@@ -86,39 +86,6 @@ impl AccessType {
         }
     }
 
-    pub fn from_rwx_str(mode: &str) -> Result<Self> {
-        let bytes = mode.as_bytes();
-        if bytes.len() != 3 {
-            bail!("access mode must be exactly 3 characters");
-        }
-
-        let valid = |on: u8, off: u8, expected: u8| on == expected || on == off;
-        if !valid(bytes[0], b'-', b'r')
-            || !valid(bytes[1], b'-', b'w')
-            || !valid(bytes[2], b'-', b'x')
-        {
-            bail!("invalid access mode");
-        }
-
-        Ok(Self {
-            read: bytes[0] == b'r',
-            write: bytes[1] == b'w',
-            execute: bytes[2] == b'x',
-        })
-    }
-}
-
-impl Default for AccessType {
-    fn default() -> Self {
-        Self {
-            read: false,
-            write: false,
-            execute: false,
-        }
-    }
-}
-
-impl AccessType {
     pub fn union(&mut self, other: AccessType) {
         self.read |= other.read;
         self.write |= other.write;
@@ -139,6 +106,43 @@ impl AccessType {
 
     pub fn is_subset_of(&self, other: AccessType) -> bool {
         other.is_superset_of(*self)
+    }
+
+    pub fn from_rwx_str(mode: &str) -> Result<Self> {
+        let bytes = mode.as_bytes();
+        if bytes.len() != 3 {
+            bail!("access mode must be exactly 3 characters");
+        }
+
+        let valid = |on: u8, off: u8, expected: u8| on == expected || on == off;
+        if !valid(bytes[0], b'-', b'r')
+            || !valid(bytes[1], b'-', b'w')
+            || !valid(bytes[2], b'-', b'x')
+        {
+            bail!("invalid access mode");
+        }
+
+        Ok(Self {
+            read: bytes[0] == b'r',
+            write: bytes[1] == b'w',
+            execute: bytes[2] == b'x',
+        })
+    }
+
+    pub fn to_rwx_str(&self, out_str: &mut String) {
+        out_str.push(if self.read { 'r' } else { '-' });
+        out_str.push(if self.write { 'w' } else { '-' });
+        out_str.push(if self.execute { 'x' } else { '-' });
+    }
+}
+
+impl Default for AccessType {
+    fn default() -> Self {
+        Self {
+            read: false,
+            write: false,
+            execute: false,
+        }
     }
 }
 

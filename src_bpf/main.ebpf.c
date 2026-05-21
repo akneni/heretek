@@ -47,20 +47,43 @@ int handle_openat(struct trace_event_raw_sys_enter *ctx) {
     return 0;
 }
 
-SEC("tracepoint/sched/sched_process_fork")
-int handle_process_fork(struct trace_event_raw_sched_process_fork *ctx) {
-    event *evt = reserve_event_slot();
+SEC("tp_btf/sched_process_fork")
+ int handle_process_fork(__u64 *ctx) {
+     struct task_struct *parent = (struct task_struct *)ctx[0];
+     struct task_struct *child = (struct task_struct *)ctx[1];
+     event *evt;
 
-    if (unlikely(!evt)) {
-        return 0;
-    }
+     struct mm_struct *child_mm = 0;
+     __s32 child_pid = 0;
+     __s32 child_tgid = 0;
+     __s32 parent_tgid = 0;
 
-    evt->event = GENE_START;
-    evt->pid = ctx->child_pid;
-    evt->ktime = bpf_ktime_get_boot_ns();
-    ((__s32*)evt->spare)[0] = (__s32)(bpf_get_current_pid_tgid() >> 32);
-    return 0;
-}
+     // No nothing when a kernel spawns a thread
+     bpf_core_read(&child_mm, sizeof(child_mm), &child->mm);
+     if (!child_mm) {
+         return 0;
+     }
+
+     // Do nothing when a process spawns a thread
+     bpf_core_read(&child_pid, sizeof(child_pid), &child->pid);
+     bpf_core_read(&child_tgid, sizeof(child_tgid), &child->tgid);
+     if (child_pid != child_tgid) {
+         return 0;
+     }
+
+     bpf_core_read(&parent_tgid, sizeof(parent_tgid), &parent->tgid);
+
+     evt = reserve_event_slot();
+     if (unlikely(!evt)) {
+         return 0;
+     }
+
+     evt->event = GENE_START;
+     evt->pid = child_tgid;
+     evt->ktime = bpf_ktime_get_boot_ns();
+     ((__s32 *)evt->spare)[0] = parent_tgid;
+     return 0;
+ }
 
 SEC("tracepoint/sched/sched_process_exec")
 int handle_process_exec(struct trace_event_raw_sched_process_exec *ctx) {

@@ -1,10 +1,7 @@
-use std::{
-    io::{Read, Write},
-};
+use std::io::{Read, Write};
 
 use anyhow::Result;
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
-
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Rpc {
@@ -13,12 +10,16 @@ pub enum Rpc {
     GetSummaryExe { exe_path: String },
 
     SetParentProfile { profile: String },
+
+    // A debugging mechanism to get some arbitrary RPC to run while debugging.
+    DebugAction,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum RpcResult {
     GetSummary(String),
     SetParentProfileRes { msg: String, success: bool },
+    DebugActionRes(String),
 }
 
 impl StreamSendable for Rpc {}
@@ -46,4 +47,3 @@ pub trait StreamSendable: Sized + Serialize + DeserializeOwned {
         Ok(self_obj)
     }
 }
-

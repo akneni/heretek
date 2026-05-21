@@ -7,6 +7,7 @@ pub enum CliCommand {
     Daemon,
     SummaryPid { pid: i32 },
     SummaryExe { exe_path: String },
+    DebugAction,
 }
 
 pub fn parse_cli() -> CliCommand {
@@ -29,6 +30,11 @@ pub fn command() -> ClapCommand {
         .arg_required_else_help(true)
         .subcommand(ClapCommand::new("daemon").about("Run the Heretek daemon"))
         .subcommand(
+            ClapCommand::new("debug-action")
+                .about("Run a debug action")
+                .hide(true),
+        )
+        .subcommand(
             ClapCommand::new("summary")
                 .about("Query a process summary by PID or executable path")
                 .arg(
@@ -44,6 +50,7 @@ impl CliCommand {
     fn from_matches(matches: &ArgMatches) -> Self {
         match matches.subcommand() {
             Some(("daemon", _)) => Self::Daemon,
+            Some(("debug-action", _)) => Self::DebugAction,
             Some(("summary", sub_matches)) => {
                 let target = sub_matches
                     .get_one::<String>("target")
@@ -93,5 +100,21 @@ mod tests {
                 exe_path: "/usr/bin/bash".to_string()
             }
         );
+    }
+
+    #[test]
+    fn parses_hidden_debug_action_command() {
+        let cli = parse_from(["htek", "debug-action"]);
+
+        assert_eq!(cli, CliCommand::DebugAction);
+    }
+
+    #[test]
+    fn hides_debug_action_from_help() {
+        let mut help = Vec::new();
+        command().write_long_help(&mut help).unwrap();
+        let help = String::from_utf8(help).unwrap();
+
+        assert!(!help.contains("debug-action"));
     }
 }

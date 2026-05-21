@@ -39,7 +39,6 @@ fn handle_simple_event(pgraph: &mut PGraph, event: Event) {
         }
         EventArgs::Execve { binary } => {
             violation = node.actor.handle_execve(binary);
-            eprintln!("Execve Called:\n{}\n\n", node.actor.curr_bin_to_str());
         }
         _ => {
             panic!("Not supported");
@@ -64,11 +63,6 @@ fn handle_complex_event(pgraph: &mut PGraph, event: Event) {
                         return;
                     }
                 };
-                println!(
-                    "Actor Started:\nParent Actor {:#?}\nChild Actor: {:#?}\n\n",
-                    creator_node.actor.curr_bin_to_str(),
-                    actor.curr_bin_to_str()
-                );
 
                 creator_node.actor.id
             };
@@ -77,15 +71,9 @@ fn handle_complex_event(pgraph: &mut PGraph, event: Event) {
         EventArgs::Exit => {
             let node = match pgraph.get_latest_prior_mut(event.pid, event.ktime) {
                 Some(r) => r,
-                None => {
-                    // eprintln!("EXIT get_latest_prior_mut Failed for ({:?})", (event));
-                    // eprintln!("{:?}\n\n", pgraph.pid_map.get(&event.pid));
-                    return;
-                }
+                None => return,
             };
             node.actor.actor_md.state = ActorState::Exited;
-
-            // println!("Actor Exited: {:#?}\n\n", node.actor);
         }
         _ => {
             panic!("Not supported");

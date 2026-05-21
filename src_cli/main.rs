@@ -162,5 +162,19 @@ fn main() {
                 }
             }
         }
+        CliCommand::DebugAction => {
+            let stream = rpc::connect_uds_ipc(&config);
+            let rpc = rpc::Rpc::DebugAction;
+            rpc.stream_send(&stream).unwrap();
+            let rpc_res = RpcResult::stream_recv(&stream).unwrap();
+            match rpc_res {
+                rpc::RpcResult::DebugActionRes(s) => {
+                    println!("{}", s);
+                }
+                _ => {
+                    unreachable!();
+                }
+            }
+        }
     }
 }

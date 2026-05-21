@@ -32,10 +32,9 @@ pub fn handle_rpc(socket: &UnixListener, pgraph_db: &mut PGraph) -> Result<()> {
                     if !bin_str.ends_with(&exe_path) {
                         continue;
                     }
-                    writeln!(&mut payload, "Pid: {:?}", actor.id.pid).unwrap();
-                    writeln!(&mut payload, "Binary: {:?}", bin).unwrap();
-                    writeln!(&mut payload, "Summary: {:#?}", actor.summary).unwrap();
-                    writeln!(&mut payload, "\n\n").unwrap();
+                    let s = actor.to_str(2);
+                    payload.push_str(&s);
+                    payload.push_str("\n\n");
                 }
             }
             if payload.len() == 0 {
@@ -48,7 +47,7 @@ pub fn handle_rpc(socket: &UnixListener, pgraph_db: &mut PGraph) -> Result<()> {
             let res_json = match pgraph_db.get_latest_mut(pid) {
                 Some(r) => {
                     let actor = &r.actor;
-                    format!("{:#?}", actor)
+                    actor.to_str(2)
                 }
                 None => {
                     format!("PID {} not found", pid)
@@ -61,6 +60,24 @@ pub fn handle_rpc(socket: &UnixListener, pgraph_db: &mut PGraph) -> Result<()> {
         Rpc::SetParentProfile { profile } => {
             let res = RpcResult::GetSummary("unimplemented".to_string());
             res.stream_send(&mut stream)?;
+        }
+        Rpc::DebugAction => {
+            if !cfg!(debug_assertions) {
+                let res = RpcResult::DebugActionRes(
+                    "debug action not supported in release mode".to_string(),
+                );
+                res.stream_send(stream)?;
+                return Ok(());
+            }
+            let mut payload = String::new();
+            for (_, node) in pgraph_db.nodes.iter() {
+                let actor = &node.actor;
+                let s = actor.to_str(1);
+                payload.push_str(&s);
+                payload.push_str("");
+            }
+            let res = RpcResult::DebugActionRes(payload);
+            res.stream_send(stream)?;
         }
     }
     Ok(())

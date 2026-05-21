@@ -1,5 +1,6 @@
 use std::{
     collections::HashMap,
+    fmt::Write,
     fs, io, mem,
     path::{Path, PathBuf},
 };
@@ -146,7 +147,10 @@ impl Actor {
     }
 
     /// Used for debugging
-    pub fn curr_bin_to_str(&self) -> String {
+    /// detail = 0 : Just PID and command
+    /// detail = 1 : Just PID and command + args
+    /// detail = 2 : PID and command + args and all files accessed
+    pub fn to_str(&self, detail: i32) -> String {
         let mut s = format!("(PID = {}) ", self.id.pid);
 
         match self.actor_md.binary.last() {
@@ -160,6 +164,10 @@ impl Actor {
             }
         }
 
+        if detail < 1 {
+            return s;
+        }
+
         let argv = self.actor_md.argv.last();
         if let Some(argv) = argv {
             if let Some(argv) = argv {
@@ -169,6 +177,19 @@ impl Actor {
                 }
             }
         }
+        s.push('\n');
+
+        if detail < 2 {
+            return s;
+        }
+        s.push_str("Filed Accessed:\n");
+        for (k, v) in self.summary.events.iter() {
+            s.push('\t');
+            v.to_rwx_str(&mut s);
+            s.push_str(" | ");
+            writeln!(&mut s, "{:?}", k).unwrap();
+        }
+
         s
     }
 
