@@ -32,6 +32,7 @@ pub fn handle_rpc(socket: &UnixListener, pgraph_db: &mut PGraph) -> Result<()> {
                     if !bin_str.ends_with(&exe_path) {
                         continue;
                     }
+                    writeln!(&mut payload, "Pid: {:?}", actor.id.pid).unwrap();
                     writeln!(&mut payload, "Binary: {:?}", bin).unwrap();
                     writeln!(&mut payload, "Summary: {:#?}", actor.summary).unwrap();
                     writeln!(&mut payload, "\n\n").unwrap();

@@ -163,8 +163,10 @@ impl Actor {
         let argv = self.actor_md.argv.last();
         if let Some(argv) = argv {
             if let Some(argv) = argv {
-                let argv = argv[1..].join(" ");
-                s.push_str(&argv);
+                if argv.len() >= 1 {
+                    let argv = argv[1..].join(" ");
+                    s.push_str(&argv);
+                }
             }
         }
         s
