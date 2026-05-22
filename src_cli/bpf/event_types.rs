@@ -385,3 +385,4 @@ pub const SYSCALL_OPEN_TREE_ATTR: u32 = 467;
 // Generic Event
 pub const GENE_START: u32 = 1000;
 pub const GENE_EXIT: u32 = 1001;
+pub const GENE_CONNECT_UDS: u32 = 1002;

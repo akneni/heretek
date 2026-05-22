@@ -34,6 +34,9 @@ fn handle_simple_event(pgraph: &mut PGraph, event: Event) {
         EventArgs::Openat { fpath, mode } => {
             violation = node.actor.handle_openat(fpath, mode);
         }
+        EventArgs::ConnectUds { fpath } => {
+            violation = node.actor.handle_connect_uds(fpath);
+        }
         EventArgs::Rename { src, dst } => {
             violation = node.actor.handle_rename(src, dst);
         }

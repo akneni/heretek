@@ -382,3 +382,4 @@
 // Generic Event
 #define GENE_START 1000
 #define GENE_EXIT 1001
+#define GENE_CONNECT_UDS 1002

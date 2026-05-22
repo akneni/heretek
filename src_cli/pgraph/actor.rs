@@ -33,7 +33,7 @@ pub struct ActorHist {
 
 #[derive(Debug, Clone)]
 pub struct ActorSummary {
-    events: HashMap<Protectee, AccessType>,
+    pub events: HashMap<Protectee, AccessType>,
 }
 
 #[derive(Debug, Clone)]
@@ -146,58 +146,6 @@ impl Actor {
         Ok(ppid)
     }
 
-    /// Used for debugging
-    /// detail = 0 : Just PID and command
-    /// detail = 1 : Just PID and command + args
-    /// detail = 2 : PID and command + args and all files accessed
-    pub fn to_str(&self, detail: i32) -> String {
-        let status = match self.actor_md.state {
-            ActorState::Running => "running ",
-            ActorState::Exited => "exited  ",
-        };
-
-        let mut s = format!("(PID = {}) ({}) ", self.id.pid, status);
-
-        match self.actor_md.binary.last() {
-            Some(r) => {
-                let r_str = r.to_str().unwrap();
-                s.push_str(r_str);
-                s.push(' ');
-            }
-            None => {
-                s.push_str("[binary unkown] ");
-            }
-        }
-
-        if detail < 1 {
-            return s;
-        }
-
-        let argv = self.actor_md.argv.last();
-        if let Some(argv) = argv {
-            if let Some(argv) = argv {
-                if argv.len() >= 1 {
-                    let argv = argv[1..].join(" ");
-                    s.push_str(&argv);
-                }
-            }
-        }
-        s.push('\n');
-
-        if detail < 2 {
-            return s;
-        }
-        s.push_str("Filed Accessed:\n");
-        for (k, v) in self.summary.events.iter() {
-            s.push('\t');
-            v.to_rwx_str(&mut s);
-            s.push_str(" | ");
-            writeln!(&mut s, "{:?}", k).unwrap();
-        }
-
-        s
-    }
-
     /// User Space Kernel Time Get Boot Nanoseconds
     /// This returns a timer that has the same semantics as bpf_ktime_get_boot_ns()
     fn usrsp_ktime_get_boot_ns(pid: i32) -> io::Result<u64> {
@@ -264,9 +212,26 @@ impl Actor {
         false
     }
 
+    pub fn handle_connect_uds(&mut self, fpath: String) -> bool {
+        let ffpath = match fs::canonicalize(&fpath) {
+            Ok(r) => r,
+            Err(_e) => {
+                return false;
+            }
+        };
+        let protectee = Protectee::File(ffpath);
+        let mode = AccessType::from_str("----c").unwrap();
+
+        let entry = self.summary.events.entry(protectee);
+        let v = entry.or_insert(mode);
+        v.union(mode);
+
+        false
+    }
+
     pub fn handle_rename(&mut self, src: String, dest: String) -> bool {
-        self.handle_openat(src, AccessType::from_rwx_str("rw-").unwrap())
-            || self.handle_openat(dest, AccessType::from_rwx_str("rw-").unwrap())
+        self.handle_openat(src, AccessType::from_str("rw-").unwrap())
+            || self.handle_openat(dest, AccessType::from_str("rw-").unwrap())
     }
 
     pub fn handle_mmap(&mut self, fpath: Option<String>, mode: AccessType) -> bool {

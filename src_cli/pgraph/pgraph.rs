@@ -1,9 +1,10 @@
 use std::{
     collections::{HashMap, HashSet, VecDeque},
     fs, io,
+    fmt::Write
 };
 
-use crate::pgraph::{Actor, ActorTuid};
+use crate::pgraph::{Actor, ActorState, ActorTuid};
 
 /// This type represents the bare minimum metadata of each actor/process.
 /// It just holds ids we can use to look up the actual actor object in the
@@ -31,6 +32,70 @@ impl PGraphNode {
             child_tuids: HashSet::new(),
             actor,
         }
+    }
+
+    /// Used for debugging
+    /// detail = 0 : Just PID and command
+    /// detail = 1 : Just PID and command + args
+    /// detail = 2 : PID and command + args and all files accessed
+    pub fn to_str(&self, detail: i32) -> String {
+        let actor = &self.actor;
+        let status: &str = match actor.actor_md.state {
+            ActorState::Running => "running ",
+            ActorState::Exited => "exited  ",
+        };
+
+        let ppid = self.creator_tuid.map(|x| x.pid.to_string())
+            .unwrap_or("?".to_string());
+        let mut s = format!("(PID = {}) (PPID = {}) ({}) ", actor.id.pid, ppid, status);
+
+        match actor.actor_md.binary.last() {
+            Some(r) => {
+                let r_str = r.to_str().unwrap();
+                s.push_str(r_str);
+                s.push(' ');
+            }
+            None => {
+                s.push_str("[binary unkown] ");
+            }
+        }
+
+        if detail < 1 {
+            return s;
+        }
+
+        let argv = actor.actor_md.argv.last();
+        if let Some(argv) = argv {
+            if let Some(argv) = argv {
+                if argv.len() >= 1 {
+                    let argv = argv[1..].join(" ");
+                    s.push_str(&argv);
+                }
+            }
+        }
+        s.push('\n');
+
+        if detail < 2 {
+            return s;
+        }
+        s.push_str("Filed Accessed:\n");
+        for (k, v) in actor.summary.events.iter() {
+            s.push('\t');
+            v.to_rwxbc_str(&mut s);
+            s.push_str(" | ");
+            writeln!(&mut s, "{:?}", k).unwrap();
+        }
+
+        if detail < 3 {
+            return s;
+        }
+
+        s.push_str("Binaries Spawned:\n");
+        for (idx, child_tuid) in self.child_tuids.iter().enumerate() {
+            writeln!(&mut s, "\t{} | PID = {}", idx, child_tuid.pid);
+        }
+
+        s
     }
 }
 

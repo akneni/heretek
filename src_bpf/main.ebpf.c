@@ -106,4 +106,37 @@ int handle_process_exit(struct trace_event_raw_sched_process_exit *ctx) {
     return 0;
 }
 
+SEC("fexit/unix_stream_connect")
+int on_unix_stream_connect(__u64 *ctx)
+{
+    struct sockaddr_un *addr = (struct sockaddr_un *)ctx[1];
+    int addr_len = (int)ctx[2];
+    int ret = (int)ctx[4];
+    event *evt;
+
+    if (ret != 0) {
+        return 0;
+    }
+
+    evt = reserve_event_slot();
+    if (unlikely(!evt)) {
+        return 0;
+    }
+
+    evt->event = GENE_CONNECT_UDS;
+    evt->pid = (__s32)(bpf_get_current_pid_tgid() >> 32);
+    evt->ktime = bpf_ktime_get_boot_ns();
+    evt->fpath1[0] = 0;
+    evt->fpath2[0] = 0;
+    ((__s32 *)evt->spare)[0] = ret;
+    ((__s32 *)evt->spare)[1] = addr_len;
+
+    if (addr && addr_len > sizeof(addr->sun_family)) {
+        bpf_probe_read_kernel_str(evt->fpath1, sizeof(evt->fpath1), addr->sun_path);
+    }
+
+    return 0;
+}
+
+
 char LICENSE[] SEC("license") = "GPL";

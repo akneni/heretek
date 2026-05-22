@@ -69,11 +69,11 @@ impl Acl {
         let mut blocks = HashMap::new();
 
         for entry in acl_json {
-            let default = AccessType::from_rwx_str(&entry.default_mode)?;
+            let default = AccessType::from_str(&entry.default_mode)?;
             let mut exceptions = HashMap::new();
 
             for (mode, subjects) in entry.rules {
-                let access = AccessType::from_rwx_str(&mode)?;
+                let access = AccessType::from_str(&mode)?;
                 for subject in subjects {
                     let profile = if subject.starts_with('/') {
                         Profile::Binary(subject)

@@ -35,7 +35,7 @@ pub fn handle_rpc(socket: &UnixListener, pgraph_db: &mut PGraph) -> Result<()> {
                     if !bin_str.ends_with(&exe_path) {
                         continue;
                     }
-                    let s = actor.to_str(2);
+                    let s = node.to_str(3);
                     payload.push_str(&s);
                     payload.push_str("\n\n");
                 }
@@ -48,10 +48,7 @@ pub fn handle_rpc(socket: &UnixListener, pgraph_db: &mut PGraph) -> Result<()> {
         }
         Rpc::GetSummaryPid { pid } => {
             let res_json = match pgraph_db.get_latest_mut(pid) {
-                Some(r) => {
-                    let actor = &r.actor;
-                    actor.to_str(2)
-                }
+                Some(r) => r.to_str(3),
                 None => {
                     format!("PID {} not found", pid)
                 }
@@ -75,7 +72,7 @@ pub fn handle_rpc(socket: &UnixListener, pgraph_db: &mut PGraph) -> Result<()> {
             let mut payload = String::new();
             for (_, node) in pgraph_db.nodes.iter() {
                 let actor = &node.actor;
-                let s = actor.to_str(1);
+                let s = node.to_str(1);
                 payload.push_str(&s);
                 payload.push_str("");
             }
