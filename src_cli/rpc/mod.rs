@@ -8,7 +8,7 @@ use anyhow::Result;
 pub use ipc::*;
 pub use uds_utils::*;
 
-use crate::pgraph::PGraph;
+use crate::pgraph::{ActorState, PGraph};
 
 pub fn handle_rpc(socket: &UnixListener, pgraph_db: &mut PGraph) -> Result<()> {
     let mut stream = match socket.accept() {
@@ -28,6 +28,9 @@ pub fn handle_rpc(socket: &UnixListener, pgraph_db: &mut PGraph) -> Result<()> {
             for (_, node) in pgraph_db.nodes.iter() {
                 let actor = &node.actor;
                 if let Some(bin) = actor.actor_md.binary.last() {
+                    if let ActorState::Exited = actor.actor_md.state {
+                        continue;
+                    }
                     let bin_str = bin.to_str().unwrap();
                     if !bin_str.ends_with(&exe_path) {
                         continue;

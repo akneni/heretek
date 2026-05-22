@@ -151,7 +151,12 @@ impl Actor {
     /// detail = 1 : Just PID and command + args
     /// detail = 2 : PID and command + args and all files accessed
     pub fn to_str(&self, detail: i32) -> String {
-        let mut s = format!("(PID = {}) ", self.id.pid);
+        let status = match self.actor_md.state {
+            ActorState::Running => "running ",
+            ActorState::Exited => "exited  ",
+        };
+
+        let mut s = format!("(PID = {}) ({}) ", self.id.pid, status);
 
         match self.actor_md.binary.last() {
             Some(r) => {

@@ -53,25 +53,15 @@ SEC("tp_btf/sched_process_fork")
      struct task_struct *child = (struct task_struct *)ctx[1];
      event *evt;
 
-     struct mm_struct *child_mm = 0;
-     __s32 child_pid = 0;
-     __s32 child_tgid = 0;
-     __s32 parent_tgid = 0;
-
-     // No nothing when a kernel spawns a thread
-     bpf_core_read(&child_mm, sizeof(child_mm), &child->mm);
-     if (!child_mm) {
+     if (child->mm == NULL) {
+         // New kthread has been spawned
          return 0;
      }
 
-     // Do nothing when a process spawns a thread
-     bpf_core_read(&child_pid, sizeof(child_pid), &child->pid);
-     bpf_core_read(&child_tgid, sizeof(child_tgid), &child->tgid);
-     if (child_pid != child_tgid) {
+     if (child->pid != child->tgid) {
+         // New non-main thread has been spawned
          return 0;
      }
-
-     bpf_core_read(&parent_tgid, sizeof(parent_tgid), &parent->tgid);
 
      evt = reserve_event_slot();
      if (unlikely(!evt)) {
@@ -79,9 +69,9 @@ SEC("tp_btf/sched_process_fork")
      }
 
      evt->event = GENE_START;
-     evt->pid = child_tgid;
+     evt->pid = child->tgid;
      evt->ktime = bpf_ktime_get_boot_ns();
-     ((__s32 *)evt->spare)[0] = parent_tgid;
+     ((__s32 *)evt->spare)[0] = parent->tgid;
      return 0;
  }
 
