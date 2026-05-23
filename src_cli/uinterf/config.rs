@@ -4,12 +4,16 @@ use std::{
     path::PathBuf,
 };
 
-use crate::uinterf::{ConfigFile, ProfileConfigFile};
+use crate::{
+    detection::Acl,
+    uinterf::{ConfigFile, ProfileConfigFile},
+};
 
 #[derive(Debug, Clone)]
 pub struct Config {
     pub profile_config: ProfileConfig,
     pub quarentine: Vec<String>,
+    pub acl: Acl,
 }
 
 /// This struct allows us to determine which profile an actro should be
@@ -20,10 +24,11 @@ pub struct ProfileConfig {
 }
 
 impl Config {
-    pub fn from(cfg_file: &ConfigFile) -> Self {
+    pub fn from(cfg_file: ConfigFile, acl: Acl) -> Self {
         Self {
             profile_config: ProfileConfig::from(&cfg_file.profile_config),
-            quarentine: cfg_file.quarentine.clone(),
+            quarentine: cfg_file.quarentine,
+            acl,
         }
     }
 }

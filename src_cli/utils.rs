@@ -12,3 +12,8 @@ pub fn bit_set(bitmap: &mut u8, idx: u8) {
 pub fn bit_clear(bitmap: &mut u8, idx: u8) {
     *bitmap &= !(0x01 << idx);
 }
+
+#[inline]
+pub fn is_glob(protectee: &str) -> bool {
+    protectee.contains('*') || protectee.contains('?') || protectee.contains('[')
+}

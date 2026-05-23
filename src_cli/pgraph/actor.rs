@@ -1,16 +1,15 @@
 use std::{
     collections::{HashMap, HashSet},
-    fmt::Write,
-    fs, io, mem,
-    path::{Path, PathBuf},
+    fs, io,
+    path::PathBuf,
 };
 
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    detection::{Acl, Protectee},
-    pgraph::{AccessType, Event, EventArgs},
+    detection::Protectee,
+    pgraph::{AccessType, Event},
     uinterf::Config,
 };
 

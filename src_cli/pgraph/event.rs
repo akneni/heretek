@@ -107,6 +107,7 @@ impl AccessType {
         self.connect &= other.connect;
     }
 
+    /// Returns true if self is a non-strict superset of other
     pub fn is_superset_of(&self, other: AccessType) -> bool {
         (!other.read || self.read)
             && (!other.write || self.write)
@@ -115,6 +116,7 @@ impl AccessType {
             && (!other.connect || self.connect)
     }
 
+    /// Returns true if self is a non-strict subset of other
     pub fn is_subset_of(&self, other: AccessType) -> bool {
         other.is_superset_of(*self)
     }

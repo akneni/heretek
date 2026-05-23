@@ -45,8 +45,11 @@ fn preflight() -> Result<Config> {
         fs::write(&config_path, &dc_str)?;
     }
 
+    let acl_path = proj.config_dir().join("ACL.json");
+    let acl = Acl::from_acl_file(&acl_path)?;
+
     let c_str = fs::read_to_string(&config_path)?;
-    let cfg: Config = Config::from(&serde_json::from_str(&c_str)?);
+    let cfg: Config = Config::from(serde_json::from_str(&c_str)?, acl);
 
     Ok(cfg)
 }
