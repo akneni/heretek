@@ -8,6 +8,7 @@ pub use actor::*;
 pub use event::*;
 pub use pgraph::*;
 
+use crate::detection::PolicyVerdict;
 use crate::uinterf::Config;
 
 /// This is the bulk of this program.
@@ -50,8 +51,12 @@ fn handle_simple_event(config: &Config, pgraph: &mut PGraph, event: Event) {
         }
     }
 
-    if violation {
-        println!("violation:\n\n{:?}", node.actor);
+    if let PolicyVerdict::Violation { .. } = violation {
+        println!(
+            "violation:\n{:?}\n\nActor:\n{}\n\n\n",
+            violation,
+            node.to_str(1)
+        );
     }
 }
 

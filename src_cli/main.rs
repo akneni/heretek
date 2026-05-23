@@ -4,7 +4,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use anyhow::{Result, bail};
+use anyhow::{Context, Result, bail};
 use aya::sys::SyscallError;
 use directories::ProjectDirs;
 
@@ -38,7 +38,7 @@ fn preflight() -> Result<Config> {
     let proj = ProjectDirs::from("com", "heretek", "heretek").unwrap();
     fs::create_dir_all(proj.config_dir())?;
 
-    let config_path = proj.config_dir().join("config.json");
+    let config_path = dbg!(proj.config_dir()).join("config.json");
     if !config_path.exists() {
         let d_conkfig = ConfigFile::default();
         let dc_str = serde_json::to_string_pretty(&d_conkfig)?;
@@ -46,11 +46,13 @@ fn preflight() -> Result<Config> {
     }
 
     let acl_path = proj.config_dir().join("ACL.json");
-    let acl = Acl::from_acl_file(&acl_path)?;
+    let acl = Acl::from_acl_file(&acl_path).context("Failed to parse ACL")?;
 
     let c_str = fs::read_to_string(&config_path)?;
-    let cfg: Config = Config::from(serde_json::from_str(&c_str)?, acl);
+    let config_file: ConfigFile =
+        serde_json::from_str(&c_str).context("Failed to parse ConfigFile")?;
 
+    let cfg = Config::from(config_file, acl);
     Ok(cfg)
 }
 

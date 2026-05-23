@@ -8,7 +8,7 @@ use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    detection::Protectee,
+    detection::{PolicyVerdict, Protectee},
     pgraph::{AccessType, Event},
     uinterf::Config,
 };
@@ -193,45 +193,53 @@ impl Actor {
 }
 
 /// This block of functoins are event handlers
-/// Each of these return a bool. It will be false if there are no violations and will be true
-/// if there is a vioilation the actor has been deemed malicious.
+/// Each of these return a PolicyVerdict type
 impl Actor {
-    pub fn handle_openat(&mut self, config: &Config, fpath: String, mode: AccessType) -> bool {
+    pub fn handle_openat(
+        &mut self,
+        config: &Config,
+        fpath: String,
+        mode: AccessType,
+    ) -> PolicyVerdict {
         let ffpath = match fs::canonicalize(&fpath) {
             Ok(r) => r,
             Err(_e) => {
-                return false;
+                return PolicyVerdict::Benign;
             }
         };
-        let protectee = Protectee::File(ffpath);
+        let protectee = Protectee::File(ffpath.clone());
 
         let entry = self.summary.events.entry(protectee);
         let v = entry.or_insert(mode);
         v.union(mode);
 
-        false
+        config
+            .acl
+            .check_violation(&self.actor_md.profile, &ffpath, *v)
     }
 
-    pub fn handle_connect_uds(&mut self, config: &Config, fpath: String) -> bool {
+    pub fn handle_connect_uds(&mut self, config: &Config, fpath: String) -> PolicyVerdict {
         let ffpath = match fs::canonicalize(&fpath) {
             Ok(r) => r,
             Err(_e) => {
-                return false;
+                return PolicyVerdict::Benign;
             }
         };
-        let protectee = Protectee::File(ffpath);
+        let protectee = Protectee::File(ffpath.clone());
         let mode = AccessType::from_str("----c").unwrap();
 
         let entry = self.summary.events.entry(protectee);
         let v = entry.or_insert(mode);
         v.union(mode);
 
-        false
+        config
+            .acl
+            .check_violation(&self.actor_md.profile, &ffpath, *v)
     }
 
-    pub fn handle_rename(&mut self, config: &Config, src: String, dest: String) -> bool {
+    pub fn handle_rename(&mut self, config: &Config, src: String, dest: String) -> PolicyVerdict {
         self.handle_openat(config, src, AccessType::from_str("rw-").unwrap())
-            || self.handle_openat(config, dest, AccessType::from_str("rw-").unwrap())
+            | self.handle_openat(config, dest, AccessType::from_str("rw-").unwrap())
     }
 
     pub fn handle_mmap(
@@ -239,17 +247,17 @@ impl Actor {
         config: &Config,
         fpath: Option<String>,
         mode: AccessType,
-    ) -> bool {
+    ) -> PolicyVerdict {
         if let Some(fpath) = fpath {
             return self.handle_openat(config, fpath, mode);
         }
-        false
+        PolicyVerdict::Benign
     }
 
-    pub fn handle_execve(&mut self, config: &Config, binary: String) -> bool {
+    pub fn handle_execve(&mut self, config: &Config, binary: String) -> PolicyVerdict {
         let binary_path = match fs::canonicalize(&binary) {
             Ok(r) => r,
-            _ => return false,
+            _ => return PolicyVerdict::Benign,
         };
 
         let args = Self::get_cmdline(self.id.pid).ok();
@@ -259,6 +267,6 @@ impl Actor {
         self.actor_md.argv.push(args);
         self.actor_md.profile.insert(profile.to_string());
 
-        false
+        PolicyVerdict::Benign
     }
 }
