@@ -23,6 +23,7 @@ mod rpc;
 mod uinterf;
 
 mod build_params;
+mod perftracker;
 mod utils;
 
 fn preflight() -> Result<Config> {
@@ -90,13 +91,16 @@ fn daemon(config: &Config) {
     let mut pgraph_db = PGraph::from_existing_processes();
 
     let iter_interval = Duration::from_micros(50_000);
+    let mut ttracker = perftracker::PerfTracker::new();
 
     loop {
         let timer = Instant::now();
+        ttracker.start_iter();
 
         // 1) Drain the ring buffers and update it's internal pgraph structure with the events just pulled
         reader.poll(&mut events).unwrap();
         events.sort_by_key(|x| x.ktime);
+        ttracker.record_num_events(events.len() as u64);
 
         // 2) Run checks against the ACL to check for violations
         for event in events.into_iter() {
@@ -110,15 +114,20 @@ fn daemon(config: &Config) {
         }
 
         // 4) Sleep for an alloted amount of time.
-        // println!("Time Elapsed: {:?}", timer.elapsed());
-        let te = timer.elapsed().as_millis() as u64;
-        let iter_interval_us = iter_interval.as_millis() as u64;
+        let te = timer.elapsed().as_micros() as u64;
+        ttracker.end_iter();
+
+        if ttracker.total_iterations % 10 == 0 {
+            ttracker.display_stats();
+        }
+
+        let iter_interval_us = iter_interval.as_micros() as u64;
         if te >= iter_interval_us {
             continue;
         } else {
             let time_left_us = iter_interval_us - te;
             if time_left_us > 1000 {
-                thread::sleep(Duration::from_millis(time_left_us));
+                thread::sleep(Duration::from_micros(time_left_us));
             }
         }
     }
