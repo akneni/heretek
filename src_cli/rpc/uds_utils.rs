@@ -1,9 +1,12 @@
-use std::{fs, os::unix::net::{UnixListener, UnixStream}, path::PathBuf};
+use std::{
+    fs,
+    os::unix::net::{UnixListener, UnixStream},
+    path::PathBuf,
+};
 
 use directories::ProjectDirs;
 
 use crate::uinterf::Config;
-
 
 pub fn get_uds_path() -> PathBuf {
     let proj = ProjectDirs::from("com", "heretek", "heretek").unwrap();

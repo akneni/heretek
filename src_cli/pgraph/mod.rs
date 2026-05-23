@@ -8,18 +8,20 @@ pub use actor::*;
 pub use event::*;
 pub use pgraph::*;
 
+use crate::uinterf::Config;
+
 /// This is the bulk of this program.
 /// It updates the Pgraph with the events and detects any violations
-pub fn handle_event(pgraph: &mut PGraph, event: Event) {
+pub fn handle_event(config: &Config, pgraph: &mut PGraph, event: Event) {
     if event.args.is_complex() {
-        handle_complex_event(pgraph, event);
+        handle_complex_event(config, pgraph, event);
     } else {
-        handle_simple_event(pgraph, event);
+        handle_simple_event(config, pgraph, event);
     }
 }
 
 /// A simple event is one that does not need to add or remove nodes from teh PGraph
-fn handle_simple_event(pgraph: &mut PGraph, event: Event) {
+fn handle_simple_event(config: &Config, pgraph: &mut PGraph, event: Event) {
     let node = match pgraph.get_latest_prior_mut(event.pid, event.ktime) {
         Some(r) => r,
         None => return,
@@ -29,19 +31,19 @@ fn handle_simple_event(pgraph: &mut PGraph, event: Event) {
 
     match event.args {
         EventArgs::Mmap { fpath, mode } => {
-            violation = node.actor.handle_mmap(fpath, mode);
+            violation = node.actor.handle_mmap(config, fpath, mode);
         }
         EventArgs::Openat { fpath, mode } => {
-            violation = node.actor.handle_openat(fpath, mode);
+            violation = node.actor.handle_openat(config, fpath, mode);
         }
         EventArgs::ConnectUds { fpath } => {
-            violation = node.actor.handle_connect_uds(fpath);
+            violation = node.actor.handle_connect_uds(config, fpath);
         }
         EventArgs::Rename { src, dst } => {
-            violation = node.actor.handle_rename(src, dst);
+            violation = node.actor.handle_rename(config, src, dst);
         }
         EventArgs::Execve { binary } => {
-            violation = node.actor.handle_execve(binary);
+            violation = node.actor.handle_execve(config, binary);
         }
         _ => {
             panic!("Not supported");
@@ -53,7 +55,7 @@ fn handle_simple_event(pgraph: &mut PGraph, event: Event) {
     }
 }
 
-fn handle_complex_event(pgraph: &mut PGraph, event: Event) {
+fn handle_complex_event(config: &Config, pgraph: &mut PGraph, event: Event) {
     match event.args {
         EventArgs::Start { creator_pid } => {
             let actor = Actor::new(event.pid, event.ktime);
@@ -61,8 +63,9 @@ fn handle_complex_event(pgraph: &mut PGraph, event: Event) {
                 let creator_node = match pgraph.get_latest_prior_mut(creator_pid, event.ktime) {
                     Some(r) => r,
                     None => {
-                        eprintln!("START get_latest_prior_mut Failed for ({:?})", (event));
-                        eprintln!("{:?}\n\n", pgraph.pid_map.get(&creator_pid));
+                        if cfg!(debug_assertions) {
+                            eprintln!("Unknown Creator Process for ({:?})", (event));
+                        }
                         return;
                     }
                 };

@@ -12,17 +12,10 @@ pub enum Protectee {
     Syscall(String),
 }
 
-#[derive(Debug, Clone, Hash, Eq, PartialEq)]
-pub enum Profile {
-    Profile(String),
-    Binary(String),
-    ProfedBin { b: String, p: String },
-}
-
 #[derive(Debug, Clone)]
 pub struct AclBlock {
     default: AccessType,
-    exceptions: HashMap<Profile, AccessType>,
+    exceptions: HashMap<String, AccessType>,
 }
 
 #[derive(Debug, Clone)]
@@ -34,68 +27,13 @@ impl AclBlock {
     /// If a process doesn’t match any of the explicit permissions (rwx, rw-, etc.),
     /// it will use the permissions specified by default. If a process matches multiple
     /// explicit permissions groups, it’s permissions will be the intersection of all the permissions.
-    pub fn get_atype_for_profile(&self, prof: &Profile) -> AccessType {
-        let mut matched = false;
-        let mut atype = self.default;
-
-        let matches = |candidate: &Profile, target: &Profile| match (candidate, target) {
-            (Profile::Binary(a), Profile::Binary(b)) => a == b,
-            (Profile::Profile(a), Profile::Profile(b)) => a == b,
-            (Profile::Binary(a), Profile::ProfedBin { b, .. }) => a == b,
-            (Profile::Profile(a), Profile::ProfedBin { p, .. }) => a == p,
-            (Profile::ProfedBin { b: ab, p: ap }, Profile::ProfedBin { b: tb, p: tp }) => {
-                ab == tb && ap == tp
-            }
-            _ => false,
-        };
-
-        for (candidate, access) in &self.exceptions {
-            if matches(candidate, prof) {
-                if matched {
-                    atype.intersection(*access);
-                } else {
-                    atype = *access;
-                    matched = true;
-                }
-            }
-        }
-
-        if matched { atype } else { self.default }
+    pub fn get_atype_for_profile(&self, prof: &String) -> AccessType {
+        unimplemented!();
     }
 }
 
 impl Acl {
     pub fn from(acl_json: Vec<AclJsonFile>) -> Result<Self> {
-        let mut blocks = HashMap::new();
-
-        for entry in acl_json {
-            let default = AccessType::from_str(&entry.default_mode)?;
-            let mut exceptions = HashMap::new();
-
-            for (mode, subjects) in entry.rules {
-                let access = AccessType::from_str(&mode)?;
-                for subject in subjects {
-                    let profile = if subject.starts_with('/') {
-                        Profile::Binary(subject)
-                    } else {
-                        Profile::Profile(subject)
-                    };
-                    exceptions.insert(profile, access);
-                }
-            }
-
-            for protectee in entry.protectees {
-                let protectee_f = fs::canonicalize(protectee).unwrap();
-                blocks.insert(
-                    Protectee::File(protectee_f),
-                    AclBlock {
-                        default,
-                        exceptions: exceptions.clone(),
-                    },
-                );
-            }
-        }
-
-        Ok(Self { blocks })
+        unimplemented!();
     }
 }

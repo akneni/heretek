@@ -1,29 +1,69 @@
-use std::collections::HashSet;
+use std::{
+    collections::{HashMap, HashSet},
+    fs,
+    path::PathBuf,
+};
 
-use serde::{Deserialize, Serialize};
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ConfigFile {
-    pub trusted_binaries: Vec<String>,
-}
+use crate::uinterf::{ConfigFile, ProfileConfigFile};
 
 #[derive(Debug, Clone)]
 pub struct Config {
-    pub trusted_binaries: HashSet<String>,
+    pub profile_config: ProfileConfig,
+    pub quarentine: Vec<String>,
 }
 
-impl Default for ConfigFile {
-    fn default() -> Self {
-        Self {
-            trusted_binaries: vec![],
-        }
-    }
+/// This struct allows us to determine which profile an actro should be
+#[derive(Debug, Clone)]
+pub struct ProfileConfig {
+    default: String,
+    mappings: HashMap<String, HashSet<PathBuf>>,
 }
 
 impl Config {
     pub fn from(cfg_file: &ConfigFile) -> Self {
         Self {
-            trusted_binaries: cfg_file.trusted_binaries.clone().into_iter().collect(),
+            profile_config: ProfileConfig::from(&cfg_file.profile_config),
+            quarentine: cfg_file.quarentine.clone(),
         }
+    }
+}
+
+impl ProfileConfig {
+    pub fn from(cfg_file: &ProfileConfigFile) -> Self {
+        let mut mappings = HashMap::new();
+
+        for (profile, bins) in cfg_file.profiles.iter() {
+            let mut mapped_bins = HashSet::new();
+
+            for bin in bins {
+                let path = PathBuf::from(bin);
+                mapped_bins.insert(fs::canonicalize(&path).unwrap_or(path));
+            }
+
+            mappings.insert(profile.clone(), mapped_bins);
+        }
+
+        Self {
+            default: cfg_file.default.clone(),
+            mappings,
+        }
+    }
+}
+
+impl ProfileConfig {
+    /// PRECONDITION: bin should be the conacical/absolute path to the binary
+    pub fn get_profile<'a>(&'a self, bin: &PathBuf) -> &'a str {
+        if cfg!(debug_assertions) {
+            if let Ok(bin_abs) = fs::canonicalize(bin) {
+                assert_eq!(&bin_abs, bin);
+            }
+        }
+
+        for (k, v) in self.mappings.iter() {
+            if v.contains(bin) {
+                return k;
+            }
+        }
+        &self.default
     }
 }

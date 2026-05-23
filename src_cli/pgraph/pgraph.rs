@@ -1,7 +1,7 @@
 use std::{
     collections::{HashMap, HashSet, VecDeque},
+    fmt::Write,
     fs, io,
-    fmt::Write
 };
 
 use crate::pgraph::{Actor, ActorState, ActorTuid};
@@ -45,7 +45,9 @@ impl PGraphNode {
             ActorState::Exited => "exited  ",
         };
 
-        let ppid = self.creator_tuid.map(|x| x.pid.to_string())
+        let ppid = self
+            .creator_tuid
+            .map(|x| x.pid.to_string())
             .unwrap_or("?".to_string());
         let mut s = format!("(PID = {}) (PPID = {}) ({}) ", actor.id.pid, ppid, status);
 

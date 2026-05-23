@@ -1,5 +1,5 @@
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     fmt::Write,
     fs, io, mem,
     path::{Path, PathBuf},
@@ -9,8 +9,9 @@ use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    detection::{Acl, Profile, Protectee},
+    detection::{Acl, Protectee},
     pgraph::{AccessType, Event, EventArgs},
+    uinterf::Config,
 };
 
 /// Actor Temporally Unique ID
@@ -51,7 +52,7 @@ pub struct ActorMd {
     // This is the set of all unique profiles that this process has ever had.
     // If multiple binaries executed with the same profile, then this list will be less than `n`
     // elements log
-    pub profile: Vec<String>,
+    pub profile: HashSet<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -67,7 +68,7 @@ impl ActorMd {
         Self {
             state: ActorState::Running,
             binary: vec![],
-            profile: vec![],
+            profile: HashSet::new(),
             argv: vec![],
         }
     }
@@ -196,7 +197,7 @@ impl Actor {
 /// Each of these return a bool. It will be false if there are no violations and will be true
 /// if there is a vioilation the actor has been deemed malicious.
 impl Actor {
-    pub fn handle_openat(&mut self, fpath: String, mode: AccessType) -> bool {
+    pub fn handle_openat(&mut self, config: &Config, fpath: String, mode: AccessType) -> bool {
         let ffpath = match fs::canonicalize(&fpath) {
             Ok(r) => r,
             Err(_e) => {
@@ -212,7 +213,7 @@ impl Actor {
         false
     }
 
-    pub fn handle_connect_uds(&mut self, fpath: String) -> bool {
+    pub fn handle_connect_uds(&mut self, config: &Config, fpath: String) -> bool {
         let ffpath = match fs::canonicalize(&fpath) {
             Ok(r) => r,
             Err(_e) => {
@@ -229,28 +230,35 @@ impl Actor {
         false
     }
 
-    pub fn handle_rename(&mut self, src: String, dest: String) -> bool {
-        self.handle_openat(src, AccessType::from_str("rw-").unwrap())
-            || self.handle_openat(dest, AccessType::from_str("rw-").unwrap())
+    pub fn handle_rename(&mut self, config: &Config, src: String, dest: String) -> bool {
+        self.handle_openat(config, src, AccessType::from_str("rw-").unwrap())
+            || self.handle_openat(config, dest, AccessType::from_str("rw-").unwrap())
     }
 
-    pub fn handle_mmap(&mut self, fpath: Option<String>, mode: AccessType) -> bool {
+    pub fn handle_mmap(
+        &mut self,
+        config: &Config,
+        fpath: Option<String>,
+        mode: AccessType,
+    ) -> bool {
         if let Some(fpath) = fpath {
-            return self.handle_openat(fpath, mode);
+            return self.handle_openat(config, fpath, mode);
         }
         false
     }
 
-    pub fn handle_execve(&mut self, binary: String) -> bool {
+    pub fn handle_execve(&mut self, config: &Config, binary: String) -> bool {
         let binary_path = match fs::canonicalize(&binary) {
             Ok(r) => r,
             _ => return false,
         };
 
         let args = Self::get_cmdline(self.id.pid).ok();
+        let profile = config.profile_config.get_profile(&binary_path);
 
         self.actor_md.binary.push(binary_path);
         self.actor_md.argv.push(args);
+        self.actor_md.profile.insert(profile.to_string());
 
         false
     }
