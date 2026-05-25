@@ -27,11 +27,6 @@ pub enum ActorState {
 }
 
 #[derive(Debug, Clone)]
-pub struct ActorHist {
-    events: Vec<Event>,
-}
-
-#[derive(Debug, Clone)]
 pub struct ActorSummary {
     pub events: HashMap<Protectee, AccessType>,
 }
@@ -57,7 +52,6 @@ pub struct ActorMd {
 #[derive(Debug, Clone)]
 pub struct Actor {
     pub id: ActorTuid,
-    pub events: ActorHist,
     pub summary: ActorSummary,
     pub actor_md: ActorMd,
 }
@@ -97,7 +91,6 @@ impl Actor {
                 start_ktime: start_time,
             },
             actor_md: ActorMd::new(),
-            events: ActorHist { events: vec![] },
             summary: ActorSummary {
                 events: HashMap::new(),
             },

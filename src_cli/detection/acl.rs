@@ -42,6 +42,7 @@ impl ProfAccessRules {
         Ok(())
     }
 
+    #[allow(unused)]
     pub fn get_atype(&self, prote: &Protectee) -> AccessType {
         match prote {
             Protectee::File(file) => self.get_atype_file(file),
@@ -59,6 +60,7 @@ impl ProfAccessRules {
         AccessType::from_str("rwxbc").unwrap()
     }
 
+    #[allow(unused)]
     pub fn get_atype_syscall(&self, syscall: &str) -> AccessType {
         self.prote_syscalls
             .get(syscall)
