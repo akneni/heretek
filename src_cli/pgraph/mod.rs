@@ -2,8 +2,6 @@ mod actor;
 mod event;
 mod pgraph;
 
-use std::{fs, mem};
-
 pub use actor::*;
 pub use event::*;
 pub use pgraph::*;
@@ -60,7 +58,7 @@ fn handle_simple_event(config: &Config, pgraph: &mut PGraph, event: Event) {
     }
 }
 
-fn handle_complex_event(config: &Config, pgraph: &mut PGraph, event: Event) {
+fn handle_complex_event(_config: &Config, pgraph: &mut PGraph, event: Event) {
     match event.args {
         EventArgs::Start { creator_pid } => {
             let actor = Actor::new(event.pid, event.ktime);

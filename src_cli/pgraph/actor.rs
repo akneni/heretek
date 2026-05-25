@@ -255,9 +255,16 @@ impl Actor {
     }
 
     pub fn handle_execve(&mut self, config: &Config, binary: String) -> PolicyVerdict {
+        // TODO: Determine the correct way to get the binary path
         let binary_path = match fs::canonicalize(&binary) {
             Ok(r) => r,
-            _ => return PolicyVerdict::Benign,
+            _ => {
+                let bin_path = format!("/proc/{}/exe", self.id.pid);
+                match fs::canonicalize(&bin_path) {
+                    Ok(r) => r,
+                    _ => return PolicyVerdict::Benign,
+                }
+            }
         };
 
         let args = Self::get_cmdline(self.id.pid).ok();

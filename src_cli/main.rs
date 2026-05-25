@@ -39,7 +39,7 @@ fn preflight() -> Result<Config> {
     let proj = ProjectDirs::from("com", "heretek", "heretek").unwrap();
     fs::create_dir_all(proj.config_dir())?;
 
-    let config_path = dbg!(proj.config_dir()).join("config.json");
+    let config_path = proj.config_dir().join("config.json");
     if !config_path.exists() {
         let d_conkfig = ConfigFile::default();
         let dc_str = serde_json::to_string_pretty(&d_conkfig)?;
@@ -47,7 +47,9 @@ fn preflight() -> Result<Config> {
     }
 
     let acl_path = proj.config_dir().join("ACL.json");
-    let acl = Acl::from_acl_file(&acl_path).context("Failed to parse ACL")?;
+    let acl = Acl::from_acl_file(&acl_path)
+        .context("Failed to parse ACL")
+        .unwrap();
 
     let c_str = fs::read_to_string(&config_path)?;
     let config_file: ConfigFile =
@@ -58,18 +60,6 @@ fn preflight() -> Result<Config> {
 }
 
 fn daemon(config: &Config) {
-    let proj = ProjectDirs::from("com", "heretek", "heretek").unwrap();
-    let acl_path = proj.config_dir().join("ACL.json");
-    let acl_str = match fs::read_to_string(&acl_path) {
-        Ok(r) => r,
-        Err(_e) => {
-            eprintln!("{:?} does not exist", &acl_path);
-            std::process::exit(1);
-        }
-    };
-    let acl_json: AclJsonFile = serde_json::from_str(&acl_str).unwrap();
-    let _acl = Acl::from(acl_json).unwrap();
-
     let socket = rpc::create_uds_ipc(&config);
     socket.set_nonblocking(true).unwrap();
 
@@ -117,9 +107,9 @@ fn daemon(config: &Config) {
         let te = timer.elapsed().as_micros() as u64;
         ttracker.end_iter();
 
-        if ttracker.total_iterations % 10 == 0 {
-            ttracker.display_stats();
-        }
+        // if ttracker.total_iterations % 10 == 0 {
+        //     ttracker.display_stats();
+        // }
 
         let iter_interval_us = iter_interval.as_micros() as u64;
         if te >= iter_interval_us {
