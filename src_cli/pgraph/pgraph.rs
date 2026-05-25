@@ -4,7 +4,10 @@ use std::{
     fs, io,
 };
 
-use crate::pgraph::{Actor, ActorState, ActorTuid};
+use crate::{
+    pgraph::{Actor, ActorState, ActorTuid},
+    uinterf::Config,
+};
 
 /// This type represents the bare minimum metadata of each actor/process.
 /// It just holds ids we can use to look up the actual actor object in the
@@ -14,6 +17,10 @@ pub struct PGraphNode {
     pub creator_tuid: Option<ActorTuid>,
     pub child_tuids: HashSet<ActorTuid>,
     pub actor: Actor,
+
+    // If this is set to true, it means that this node as well as all parent nodes have the
+    // "unchaned" profile and no others.
+    pub unchained_chain: bool,
 }
 
 /// This is the main structure that holds the graph of all the processes.
@@ -31,6 +38,7 @@ impl PGraphNode {
             creator_tuid,
             child_tuids: HashSet::new(),
             actor,
+            unchained_chain: false,
         }
     }
 
@@ -111,7 +119,7 @@ impl PGraph {
 
     /// Scans the /proc directory and constructs the Pgraph (in a best effort manner)
     /// It will assume that the parent ID of a process is the creator ID.
-    pub fn from_existing_processes() -> Self {
+    pub fn from_existing_processes(config: &Config) -> Self {
         let mut pgraph = Self::new();
         let hz = match clock_ticks_per_second() {
             Ok(hz) => hz,
@@ -163,12 +171,19 @@ impl PGraph {
 
         let mut child_edges = Vec::new();
 
-        for (actor, ppid) in processes {
+        for (mut actor, ppid) in processes {
             let actor_tuid = actor.id;
             let creator_tuid = pid_to_tuid.get(&ppid).copied();
 
             if let Some(creator_tuid) = creator_tuid {
                 child_edges.push((creator_tuid, actor_tuid));
+            }
+
+            // Get the profile for this action
+            let actor_bin = actor.actor_md.binary.last().cloned();
+            if let Some(actor_bin) = actor_bin {
+                let actor_profile = config.profile_config.get_profile(&actor_bin);
+                actor.actor_md.profile.insert(actor_profile.to_string());
             }
 
             pgraph
@@ -181,6 +196,8 @@ impl PGraph {
                 creator.child_tuids.insert(child_tuid);
             }
         }
+
+        pgraph.update_bootstrap_unchained_chains();
         pgraph
     }
 
@@ -213,15 +230,11 @@ impl PGraph {
 
     /// Inserts the actor into the PGraph data structure
     /// This makes sure to update the creator PGraphNode and pid_map to keep everything consistent
-    pub fn insert_actor(&mut self, mut actor: Actor, creator_tuid: ActorTuid) {
+    pub fn insert_actor(&mut self, actor: Actor, creator_tuid: ActorTuid) {
         // Update creator's child vec
         let creator = self.get_or_create(creator_tuid);
         creator.child_tuids.insert(actor.id);
-
-        // Assign the creator's profiles to the child
-        for prof in creator.actor.actor_md.profile.iter() {
-            actor.actor_md.profile.insert(prof.clone());
-        }
+        let unchained_chain = creator.unchained_chain && actor.actor_md.profile.is_empty();
 
         // Update pid map
         let entry = self.pid_map.entry(actor.id.pid);
@@ -229,7 +242,8 @@ impl PGraph {
         ktimes.push_back(actor.id.start_ktime);
 
         // Insert actor into the nodes map
-        let pnode = PGraphNode::new(actor, Some(creator_tuid));
+        let mut pnode = PGraphNode::new(actor, Some(creator_tuid));
+        pnode.unchained_chain = unchained_chain;
         self.nodes.insert(pnode.actor.id, pnode);
     }
 
@@ -240,6 +254,55 @@ impl PGraph {
             PGraphNode::new(actor, None)
         })
     }
+
+    fn update_bootstrap_unchained_chains(&mut self) {
+        let mut memo = HashMap::new();
+        let mut visiting = HashSet::new();
+
+        for tuid in self.nodes.keys().copied().collect::<Vec<_>>() {
+            let unchained_chain =
+                compute_bootstrap_unchained_chain(tuid, &self.nodes, &mut memo, &mut visiting);
+            if let Some(node) = self.nodes.get_mut(&tuid) {
+                node.unchained_chain = unchained_chain;
+            }
+        }
+    }
+}
+
+fn compute_bootstrap_unchained_chain(
+    tuid: ActorTuid,
+    nodes: &HashMap<ActorTuid, PGraphNode>,
+    memo: &mut HashMap<ActorTuid, bool>,
+    visiting: &mut HashSet<ActorTuid>,
+) -> bool {
+    if let Some(&unchained_chain) = memo.get(&tuid) {
+        return unchained_chain;
+    }
+
+    if !visiting.insert(tuid) {
+        return false;
+    }
+
+    let Some(node) = nodes.get(&tuid) else {
+        visiting.remove(&tuid);
+        memo.insert(tuid, false);
+        return false;
+    };
+
+    let has_only_unchained_profile =
+        node.actor.actor_md.profile.len() == 1 && node.actor.actor_md.profile.contains("unchained");
+    let parent_unchained_chain = match node.creator_tuid {
+        Some(creator_tuid) => {
+            compute_bootstrap_unchained_chain(creator_tuid, nodes, memo, visiting)
+        }
+        None => node.actor.id.pid == 1,
+    };
+    let unchained_chain = has_only_unchained_profile && parent_unchained_chain;
+
+    visiting.remove(&tuid);
+    memo.insert(tuid, unchained_chain);
+
+    unchained_chain
 }
 
 fn read_proc_stat(pid: i32, hz: u64) -> io::Result<(i32, u64)> {

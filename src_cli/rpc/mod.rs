@@ -1,7 +1,7 @@
 mod ipc;
 mod uds_utils;
 
-use std::os::unix::net::UnixListener;
+use std::{env, os::unix::net::UnixListener};
 
 use anyhow::{Context, Result, bail};
 pub use ipc::*;
@@ -99,11 +99,18 @@ fn handle_set_profile(
     profile: &str,
     pid: i32,
 ) -> Result<()> {
-    if !config.acl.profiles.contains_key(profile) {
+    if !config.acl.profiles.contains_key(profile) && profile != "unchained" {
         bail!("Profile does not exist");
     }
+
+    if pid == 1 || pid == std::process::id() as i32 {
+        bail!("Cannot attach a profile to the htek daemon or to the init process");
+    }
+
     let node = pgraph_db.get_latest_mut(pid).context("PID not found")?;
     node.actor.actor_md.profile.clear();
-    node.actor.actor_md.profile.insert(profile.to_string());
+    if profile != "unchained" {
+        node.actor.actor_md.profile.insert(profile.to_string());
+    }
     Ok(())
 }

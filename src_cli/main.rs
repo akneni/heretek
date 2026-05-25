@@ -75,7 +75,7 @@ fn daemon(config: &Config) {
     };
 
     let mut events = vec![];
-    let mut pgraph_db = PGraph::from_existing_processes();
+    let mut pgraph_db = PGraph::from_existing_processes(&config);
 
     let iter_interval = Duration::from_micros(50_000);
     let mut ttracker = perftracker::PerfTracker::new();
