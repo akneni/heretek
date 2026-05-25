@@ -63,6 +63,7 @@ impl PGraphNode {
         }
 
         if detail < 1 {
+            s.push_str(&format!("\nProfiles: {:?}", self.actor.actor_md.profile));
             return s;
         }
 
@@ -74,7 +75,7 @@ impl PGraphNode {
             let argv = argv[1..].join(" ");
             s.push_str(&argv);
         }
-        s.push('\n');
+        s.push_str(&format!("\nProfiles: {:?}\n", self.actor.actor_md.profile));
 
         if detail < 2 {
             return s;

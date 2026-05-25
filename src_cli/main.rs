@@ -96,7 +96,7 @@ fn daemon(config: &Config) {
         events = vec![];
 
         // 3) Check for IPC RPCs from CLI invocations of this tool (like `htek desc <pid>`)
-        if let Err(e) = rpc::handle_rpc(&socket, &mut pgraph_db) {
+        if let Err(e) = rpc::handle_rpc(&config, &mut pgraph_db, &socket) {
             eprintln!("Error processing RPC: {e}");
         }
 

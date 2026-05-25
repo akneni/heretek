@@ -3,13 +3,16 @@ mod uds_utils;
 
 use std::os::unix::net::UnixListener;
 
-use anyhow::Result;
+use anyhow::{Context, Result, bail};
 pub use ipc::*;
 pub use uds_utils::*;
 
-use crate::pgraph::{ActorState, PGraph};
+use crate::{
+    pgraph::{ActorState, PGraph},
+    uinterf::Config,
+};
 
-pub fn handle_rpc(socket: &UnixListener, pgraph_db: &mut PGraph) -> Result<()> {
+pub fn handle_rpc(config: &Config, pgraph_db: &mut PGraph, socket: &UnixListener) -> Result<()> {
     let mut stream = match socket.accept() {
         Ok((stream, _)) => stream,
         Err(_e) => {
@@ -56,11 +59,17 @@ pub fn handle_rpc(socket: &UnixListener, pgraph_db: &mut PGraph) -> Result<()> {
             let res = RpcResult::GetSummary(res_json);
             res.stream_send(&mut stream)?;
         }
-        Rpc::SetParentProfile {
-            #[allow(unused)]
-            profile,
-        } => {
-            let res = RpcResult::GetSummary("unimplemented".to_string());
+        Rpc::SetProfile { profile, pid } => {
+            let res = match handle_set_profile(config, pgraph_db, &profile, pid) {
+                Ok(()) => RpcResult::SetProfileRes {
+                    msg: "success".to_string(),
+                    success: true,
+                },
+                Err(e) => RpcResult::SetProfileRes {
+                    msg: format!("{}", e),
+                    success: false,
+                },
+            };
             res.stream_send(&mut stream)?;
         }
         Rpc::DebugAction => {
@@ -81,5 +90,20 @@ pub fn handle_rpc(socket: &UnixListener, pgraph_db: &mut PGraph) -> Result<()> {
             res.stream_send(stream)?;
         }
     }
+    Ok(())
+}
+
+fn handle_set_profile(
+    config: &Config,
+    pgraph_db: &mut PGraph,
+    profile: &str,
+    pid: i32,
+) -> Result<()> {
+    if !config.acl.profiles.contains_key(profile) {
+        bail!("Profile does not exist");
+    }
+    let node = pgraph_db.get_latest_mut(pid).context("PID not found")?;
+    node.actor.actor_md.profile.clear();
+    node.actor.actor_md.profile.insert(profile.to_string());
     Ok(())
 }

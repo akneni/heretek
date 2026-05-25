@@ -12,7 +12,9 @@ pub enum Rpc {
     GetSummaryPid { pid: i32 },
     GetSummaryExe { exe_path: String },
 
-    SetParentProfile { profile: String },
+    // Sets the actor whose pid is passed to the profile specified
+    // and removes all other profiles.
+    SetProfile { profile: String, pid: i32 },
 
     // A debugging mechanism to get some arbitrary RPC to run while debugging.
     DebugAction,
@@ -21,7 +23,7 @@ pub enum Rpc {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum RpcResult {
     GetSummary(String),
-    SetParentProfileRes { msg: String, success: bool },
+    SetProfileRes { msg: String, success: bool },
     DebugActionRes(String),
 }
 
