@@ -8,6 +8,7 @@ pub enum PolicyVerdict {
     Violation {
         prote: Protectee,
         attempted_access: AccessType,
+        allowed_access: AccessType,
     },
 }
 

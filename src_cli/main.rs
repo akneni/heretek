@@ -67,8 +67,8 @@ fn daemon(config: &Config) {
             std::process::exit(1);
         }
     };
-    let acl_json: Vec<AclJsonFile> = serde_json::from_str(&acl_str).unwrap();
-    let acl = Acl::from(acl_json).unwrap();
+    let acl_json: AclJsonFile = serde_json::from_str(&acl_str).unwrap();
+    let _acl = Acl::from(acl_json).unwrap();
 
     let socket = rpc::create_uds_ipc(&config);
     socket.set_nonblocking(true).unwrap();
