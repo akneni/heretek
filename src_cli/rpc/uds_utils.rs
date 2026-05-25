@@ -16,7 +16,7 @@ pub fn get_uds_path() -> PathBuf {
     uds_path
 }
 
-pub fn create_uds_ipc(config: &Config) -> UnixListener {
+pub fn create_uds_ipc(_config: &Config) -> UnixListener {
     let uds_path = get_uds_path();
     if uds_path.exists() {
         fs::remove_file(&uds_path).unwrap();
@@ -25,7 +25,7 @@ pub fn create_uds_ipc(config: &Config) -> UnixListener {
     socket
 }
 
-pub fn connect_uds_ipc(config: &Config) -> UnixStream {
+pub fn connect_uds_ipc(_config: &Config) -> UnixStream {
     let uds_path = get_uds_path();
     let stream = UnixStream::connect(&uds_path).unwrap();
     stream

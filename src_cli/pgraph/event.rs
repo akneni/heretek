@@ -20,6 +20,7 @@ pub struct Event {
     pub args: EventArgs,
 }
 
+#[allow(unused)]
 #[derive(Debug, Clone)]
 pub enum EventArgs {
     // System Calls
@@ -99,6 +100,7 @@ impl AccessType {
         self.connect |= other.connect;
     }
 
+    #[allow(unused)]
     pub fn intersection(&mut self, other: AccessType) {
         self.read &= other.read;
         self.write &= other.write;
@@ -117,6 +119,7 @@ impl AccessType {
     }
 
     /// Returns true if self is a non-strict subset of other
+    #[allow(unused)]
     pub fn is_subset_of(&self, other: AccessType) -> bool {
         other.is_superset_of(*self)
     }

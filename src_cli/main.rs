@@ -1,18 +1,16 @@
-use std::os::unix::net::UnixListener;
 use std::{
     fs, process, thread,
     time::{Duration, Instant},
 };
 
 use anyhow::{Context, Result, bail};
-use aya::sys::SyscallError;
 use directories::ProjectDirs;
 
 use crate::pgraph::PGraph;
 use crate::rpc::{RpcResult, StreamSendable};
 use crate::uinterf::CliCommand;
 use crate::{
-    detection::{Acl, AclJsonFile},
+    detection::Acl,
     uinterf::{Config, ConfigFile},
 };
 
@@ -24,7 +22,6 @@ mod uinterf;
 
 mod build_params;
 mod perftracker;
-mod utils;
 
 fn preflight() -> Result<Config> {
     if "root" != whoami::account()? {

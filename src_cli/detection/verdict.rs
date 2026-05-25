@@ -2,6 +2,7 @@ use std::ops::BitOr;
 
 use crate::{detection::Protectee, pgraph::AccessType};
 
+#[allow(unused)]
 #[derive(Debug, Clone)]
 pub enum PolicyVerdict {
     Benign,

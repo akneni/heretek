@@ -14,6 +14,8 @@ use crate::pgraph::Event;
 
 const EVENT_BUFFER_SLOTS: u64 = 1 << build_params::RING_BUF_SIZE_LOG2;
 const EVENT_METADATA_SLOT: u32 = EVENT_BUFFER_SLOTS as u32;
+
+#[allow(unused)]
 const EVENT_PARAM_SLOT: u32 = EVENT_BUFFER_SLOTS as u32 + 1;
 
 #[repr(C)]

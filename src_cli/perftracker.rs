@@ -40,6 +40,7 @@ impl PerfTracker {
         self.max_time_elapsed = self.max_time_elapsed.max(te);
     }
 
+    #[allow(unused)]
     pub fn display_stats(&self) {
         println!(
             "(Avg Time {:?}) (Max Time = {:?}) (Avg Events {}) (Max Events {})",

@@ -50,7 +50,7 @@ impl ProfAccessRules {
         }
     }
 
-    pub fn get_atype_file(&self, file: &PathBuf) -> AccessType {
+    pub fn get_atype_file(&self, file: &Path) -> AccessType {
         for (k, v) in self.prote_files.iter() {
             if k.matches_path(file) {
                 return *v;

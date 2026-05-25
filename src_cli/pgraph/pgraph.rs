@@ -94,7 +94,7 @@ impl PGraphNode {
 
         s.push_str("Binaries Spawned:\n");
         for (idx, child_tuid) in self.child_tuids.iter().enumerate() {
-            writeln!(&mut s, "\t{} | PID = {}", idx, child_tuid.pid);
+            writeln!(&mut s, "\t{} | PID = {}", idx, child_tuid.pid).unwrap();
         }
 
         s

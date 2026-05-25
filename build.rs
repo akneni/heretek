@@ -70,7 +70,7 @@ fn generate_const_c(build_params: &HashMap<String, String>) {
     fs::write(filename, payload).unwrap();
 }
 
-fn check_params(build_params: &HashMap<String, String>) {
+fn check_params(_build_params: &HashMap<String, String>) {
     // TODO
 }
 

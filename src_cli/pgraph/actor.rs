@@ -1,6 +1,6 @@
 use std::{
     collections::{HashMap, HashSet},
-    fs, io,
+    fs,
     path::PathBuf,
 };
 
@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     detection::{PolicyVerdict, Protectee},
-    pgraph::{AccessType, Event},
+    pgraph::AccessType,
     uinterf::Config,
 };
 
@@ -70,15 +70,9 @@ impl ActorMd {
     /// For exammple
     /// `/usr/bin/evil_binary arg1 arg2`                 -> `/usr/bin/evil_binary`
     /// `/usr/bin/python /tmp/evil_script.py arg1 arg2`  -> `/tmp/evil_script.py`
+    #[allow(unused)]
     pub fn get_actors(&self) -> Vec<PathBuf> {
         unimplemented!();
-    }
-}
-
-impl ActorSummary {
-    fn get(&mut self, p: Protectee) -> &mut AccessType {
-        let entry = self.events.entry(p);
-        entry.or_insert(AccessType::default())
     }
 }
 
@@ -113,64 +107,6 @@ impl Actor {
         actor.actor_md.argv.push(cmd_args);
 
         Ok(actor)
-    }
-
-    /// Gets the parent PID (NOT the creator ID)
-    fn get_ppid(&self) -> Result<i32> {
-        let pid = self.id.pid;
-        let stat = fs::read_to_string(format!("/proc/{pid}/stat"))?;
-
-        // Format:
-        // pid (comm) state ppid ...
-        let after_comm = stat
-            .rsplit_once(") ")
-            .context("malformed /proc stat: missing process name terminator")?
-            .1;
-
-        let mut fields = after_comm.split_whitespace();
-
-        let _state = fields.next().context("missing process state")?;
-        let ppid = fields
-            .next()
-            .context("missing parent pid")?
-            .parse::<i32>()
-            .context("invalid parent pid")?;
-
-        Ok(ppid)
-    }
-
-    /// User Space Kernel Time Get Boot Nanoseconds
-    /// This returns a timer that has the same semantics as bpf_ktime_get_boot_ns()
-    fn usrsp_ktime_get_boot_ns(pid: i32) -> io::Result<u64> {
-        let path = format!("/proc/{pid}/stat");
-        let stat = fs::read_to_string(path)?;
-
-        let rp = stat
-            .rfind(')')
-            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "bad /proc stat format"))?;
-
-        let after = stat
-            .get(rp + 2..) // skip ") "
-            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "bad /proc stat format"))?;
-
-        let starttime_ticks_str = after
-            .split_whitespace()
-            .nth(19)
-            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "missing starttime field"))?;
-
-        let starttime_ticks: u64 = starttime_ticks_str
-            .parse()
-            .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "invalid starttime field"))?;
-
-        let hz = unsafe { libc::sysconf(libc::_SC_CLK_TCK) };
-        if hz <= 0 {
-            return Err(io::Error::new(
-                io::ErrorKind::Other,
-                "sysconf(_SC_CLK_TCK) failed",
-            ));
-        }
-
-        Ok(starttime_ticks.saturating_mul(1_000_000_000) / hz as u64)
     }
 
     fn get_cmdline(pid: i32) -> std::io::Result<Vec<String>> {

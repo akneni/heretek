@@ -1,7 +1,6 @@
 mod ipc;
 mod uds_utils;
 
-use std::fmt::Write;
 use std::os::unix::net::UnixListener;
 
 use anyhow::Result;
@@ -40,7 +39,7 @@ pub fn handle_rpc(socket: &UnixListener, pgraph_db: &mut PGraph) -> Result<()> {
                     payload.push_str("\n\n");
                 }
             }
-            if payload.len() == 0 {
+            if payload.is_empty() {
                 payload.push_str("No actors found");
             }
             let res = RpcResult::GetSummary(payload);
@@ -57,7 +56,10 @@ pub fn handle_rpc(socket: &UnixListener, pgraph_db: &mut PGraph) -> Result<()> {
             let res = RpcResult::GetSummary(res_json);
             res.stream_send(&mut stream)?;
         }
-        Rpc::SetParentProfile { profile } => {
+        Rpc::SetParentProfile {
+            #[allow(unused)]
+            profile,
+        } => {
             let res = RpcResult::GetSummary("unimplemented".to_string());
             res.stream_send(&mut stream)?;
         }
@@ -71,7 +73,6 @@ pub fn handle_rpc(socket: &UnixListener, pgraph_db: &mut PGraph) -> Result<()> {
             }
             let mut payload = String::new();
             for (_, node) in pgraph_db.nodes.iter() {
-                let actor = &node.actor;
                 let s = node.to_str(1);
                 payload.push_str(&s);
                 payload.push_str("");

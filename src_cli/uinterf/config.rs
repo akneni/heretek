@@ -9,6 +9,7 @@ use crate::{
     uinterf::{ConfigFile, ProfileConfigFile},
 };
 
+#[allow(unused)]
 #[derive(Debug, Clone)]
 pub struct Config {
     pub profile_config: ProfileConfig,
