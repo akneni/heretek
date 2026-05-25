@@ -3,7 +3,7 @@ use glob::Pattern;
 use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use crate::detection::{AclJsonFile, AclProfileJsonFile, PolicyVerdict, Protectee};
 use crate::pgraph::AccessType;
@@ -64,7 +64,7 @@ impl ProfAccessRules {
     pub fn get_atype_syscall(&self, syscall: &str) -> AccessType {
         self.prote_syscalls
             .get(syscall)
-            .map(|&x| x)
+            .copied()
             .unwrap_or(AccessType::from_str("--x--").unwrap())
     }
 }
@@ -140,7 +140,7 @@ impl Acl {
     pub fn check_violation(
         &self,
         profiles: &HashSet<String>,
-        file: &PathBuf,
+        file: &Path,
         mode: AccessType,
     ) -> PolicyVerdict {
         for prof in profiles.iter() {
@@ -157,7 +157,7 @@ impl Acl {
             let allowed_atype = access_list.get_atype_file(file);
             if !allowed_atype.is_superset_of(mode) {
                 return PolicyVerdict::Violation {
-                    prote: Protectee::File(file.clone()),
+                    prote: Protectee::File(file.to_path_buf()),
                     attempted_access: mode,
                     allowed_access: allowed_atype,
                 };

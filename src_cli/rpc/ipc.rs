@@ -1,4 +1,7 @@
-use std::io::{Read, Write};
+use std::{
+    io::{Read, Write},
+    mem,
+};
 
 use anyhow::Result;
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
@@ -28,9 +31,9 @@ impl StreamSendable for RpcResult {}
 pub trait StreamSendable: Sized + Serialize + DeserializeOwned {
     fn stream_send(&self, mut stream: impl Write) -> Result<()> {
         let self_json = serde_json::to_string_pretty(&self)?;
-        stream.write(&(self_json.len() as u64).to_le_bytes())?;
-        stream.write(self_json.as_bytes())?;
-
+        let mut bytes_send = stream.write(&(self_json.len() as u64).to_le_bytes())?;
+        bytes_send += stream.write(self_json.as_bytes())?;
+        assert!(bytes_send == self_json.len() + mem::size_of::<u64>());
         Ok(())
     }
 

@@ -26,28 +26,16 @@ fn handle_simple_event(config: &Config, pgraph: &mut PGraph, event: Event) {
         None => return,
     };
 
-    let violation;
-
-    match event.args {
-        EventArgs::Mmap { fpath, mode } => {
-            violation = node.actor.handle_mmap(config, fpath, mode);
-        }
-        EventArgs::Openat { fpath, mode } => {
-            violation = node.actor.handle_openat(config, fpath, mode);
-        }
-        EventArgs::ConnectUds { fpath } => {
-            violation = node.actor.handle_connect_uds(config, fpath);
-        }
-        EventArgs::Rename { src, dst } => {
-            violation = node.actor.handle_rename(config, src, dst);
-        }
-        EventArgs::Execve { binary } => {
-            violation = node.actor.handle_execve(config, binary);
-        }
+    let violation = match event.args {
+        EventArgs::Mmap { fpath, mode } => node.actor.handle_mmap(config, fpath, mode),
+        EventArgs::Openat { fpath, mode } => node.actor.handle_openat(config, fpath, mode),
+        EventArgs::ConnectUds { fpath } => node.actor.handle_connect_uds(config, fpath),
+        EventArgs::Rename { src, dst } => node.actor.handle_rename(config, src, dst),
+        EventArgs::Execve { binary } => node.actor.handle_execve(config, binary),
         _ => {
             panic!("Not supported");
         }
-    }
+    };
 
     if let PolicyVerdict::Violation { .. } = violation {
         println!(

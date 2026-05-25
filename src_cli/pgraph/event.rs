@@ -149,7 +149,7 @@ impl AccessType {
         })
     }
 
-    pub fn to_rwxbc_str(&self, out_str: &mut String) {
+    pub fn to_rwxbc_str(self, out_str: &mut String) {
         out_str.push(if self.read { 'r' } else { '-' });
         out_str.push(if self.write { 'w' } else { '-' });
         out_str.push(if self.execute { 'x' } else { '-' });
