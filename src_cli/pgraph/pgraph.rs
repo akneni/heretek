@@ -67,14 +67,12 @@ impl PGraphNode {
         }
 
         let argv = actor.actor_md.argv.last();
-        if let Some(argv) = argv {
-            if let Some(argv) = argv {
-                if argv.len() >= 1 {
+        if let Some(argv) = argv
+            && let Some(argv) = argv
+                && !argv.is_empty() {
                     let argv = argv[1..].join(" ");
                     s.push_str(&argv);
                 }
-            }
-        }
         s.push('\n');
 
         if detail < 2 {
@@ -270,8 +268,7 @@ fn read_proc_stat(pid: i32, hz: u64) -> io::Result<(i32, u64)> {
 fn clock_ticks_per_second() -> io::Result<u64> {
     let hz = unsafe { libc::sysconf(libc::_SC_CLK_TCK) };
     if hz <= 0 {
-        return Err(io::Error::new(
-            io::ErrorKind::Other,
+        return Err(io::Error::other(
             "sysconf(_SC_CLK_TCK) failed",
         ));
     }

@@ -59,11 +59,10 @@ impl ProfileConfig {
 impl ProfileConfig {
     /// PRECONDITION: bin should be the conacical/absolute path to the binary
     pub fn get_profile<'a>(&'a self, bin: &PathBuf) -> &'a str {
-        if cfg!(debug_assertions) {
-            if let Ok(bin_abs) = fs::canonicalize(bin) {
+        if cfg!(debug_assertions)
+            && let Ok(bin_abs) = fs::canonicalize(bin) {
                 assert_eq!(&bin_abs, bin);
             }
-        }
 
         for (k, v) in self.mappings.iter() {
             if v.contains(bin) {

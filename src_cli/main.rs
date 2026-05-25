@@ -57,7 +57,7 @@ fn preflight() -> Result<Config> {
 }
 
 fn daemon(config: &Config) {
-    let socket = rpc::create_uds_ipc(&config);
+    let socket = rpc::create_uds_ipc(config);
     socket.set_nonblocking(true).unwrap();
 
     let reader = bpf::BpfEventArrayReader::from_pinned_path("/sys/fs/bpf/heretek-maps/events");
