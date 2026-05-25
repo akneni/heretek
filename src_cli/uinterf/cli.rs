@@ -7,6 +7,7 @@ pub enum CliCommand {
     Daemon,
     SummaryPid { pid: i32 },
     SummaryExe { exe_path: String },
+    SetProfile { profile: String, pid: i32 },
     DebugAction,
 }
 
@@ -44,6 +45,23 @@ pub fn command() -> ClapCommand {
                         .help("PID or executable path to summarize"),
                 ),
         )
+        .subcommand(
+            ClapCommand::new("set-profile")
+                .about("Set a process profile")
+                .arg(
+                    Arg::new("profile")
+                        .value_name("profile")
+                        .required(true)
+                        .help("Profile to assign"),
+                )
+                .arg(
+                    Arg::new("pid")
+                        .short('p')
+                        .value_name("pid")
+                        .required(true)
+                        .help("PID to assign the profile to"),
+                ),
+        )
 }
 
 impl CliCommand {
@@ -57,6 +75,19 @@ impl CliCommand {
                     .expect("clap ensures summary target is present");
 
                 Self::summary_from_arg(target)
+            }
+            Some(("set-profile", sub_matches)) => {
+                let profile = sub_matches
+                    .get_one::<String>("profile")
+                    .expect("clap ensures profile is present")
+                    .to_string();
+                let pid = sub_matches
+                    .get_one::<String>("pid")
+                    .expect("clap ensures pid is present")
+                    .parse::<i32>()
+                    .expect("pid must be an integer");
+
+                Self::SetProfile { profile, pid }
             }
             _ => unreachable!("clap ensures a valid subcommand is present"),
         }
@@ -98,6 +129,19 @@ mod tests {
             cli,
             CliCommand::SummaryExe {
                 exe_path: "/usr/bin/bash".to_string()
+            }
+        );
+    }
+
+    #[test]
+    fn parses_set_profile_command() {
+        let cli = parse_from(["htek", "set-profile", "hardened", "-p", "1234"]);
+
+        assert_eq!(
+            cli,
+            CliCommand::SetProfile {
+                profile: "hardened".to_string(),
+                pid: 1234,
             }
         );
     }

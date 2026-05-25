@@ -6,13 +6,13 @@ use std::{
 use anyhow::{Context, Result, bail};
 use directories::ProjectDirs;
 
-use crate::pgraph::PGraph;
 use crate::rpc::{RpcResult, StreamSendable};
 use crate::uinterf::CliCommand;
 use crate::{
     detection::Acl,
     uinterf::{Config, ConfigFile},
 };
+use crate::{pgraph::PGraph, rpc::Rpc};
 
 mod bpf;
 mod detection;
@@ -150,13 +150,30 @@ fn main() {
             }
         }
         CliCommand::SummaryExe { exe_path } => {
-            let stream = rpc::connect_uds_ipc(&config);
             let rpc = rpc::Rpc::GetSummaryExe { exe_path };
+            let stream = rpc::connect_uds_ipc(&config);
             rpc.stream_send(&stream).unwrap();
             let rpc_res = RpcResult::stream_recv(&stream).unwrap();
             match rpc_res {
                 rpc::RpcResult::GetSummary(s) => {
                     println!("{}", s);
+                }
+                _ => {
+                    unreachable!();
+                }
+            }
+        }
+        CliCommand::SetProfile { profile, pid } => {
+            let rpc = Rpc::SetProfile { profile, pid };
+            let stream = rpc::connect_uds_ipc(&config);
+            rpc.stream_send(&stream).unwrap();
+            let rpc_res = RpcResult::stream_recv(&stream).unwrap();
+            match rpc_res {
+                rpc::RpcResult::SetProfileRes { msg, success } => {
+                    println!("{}", msg);
+                    if !success {
+                        std::process::exit(1);
+                    }
                 }
                 _ => {
                     unreachable!();
