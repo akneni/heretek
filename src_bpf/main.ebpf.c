@@ -47,6 +47,28 @@ int handle_openat(struct trace_event_raw_sys_enter *ctx) {
     return 0;
 }
 
+SEC("tracepoint/syscalls/sys_enter_chdir")
+int handle_chdir(struct trace_event_raw_sys_enter *ctx) {
+    event *evt;
+    const char *filename;
+
+    evt = reserve_event_slot();
+    if (unlikely(!evt)) {
+        return 0;
+    }
+
+    filename = (const char *)ctx->args[0];
+
+    evt->event = SYSCALL_CHDIR;
+    evt->pid = (__s32)(bpf_get_current_pid_tgid() >> 32);
+    evt->ktime = bpf_ktime_get_boot_ns();
+    if (likely(filename != 0)) {
+        bpf_probe_read_user_str(evt->fpath1, sizeof(evt->fpath1), filename);
+    }
+
+    return 0;
+}
+
 SEC("tp_btf/sched_process_fork")
  int handle_process_fork(__u64 *ctx) {
      struct task_struct *parent = (struct task_struct *)ctx[0];

@@ -1,4 +1,7 @@
-use std::{fmt, path::PathBuf};
+use std::{
+    fmt,
+    path::{Path, PathBuf},
+};
 
 use anyhow::{Result, bail};
 
@@ -44,6 +47,9 @@ pub enum EventArgs {
     Rename {
         src: PathBuf,
         dst: PathBuf,
+    },
+    ChDir {
+        dpath: PathBuf,
     },
 
     // Generic Events
@@ -191,11 +197,10 @@ impl Event {
             event_types::SYSCALL_EXECVE => EventArgs::Execve {
                 binary: actor.resolve_path_str(&c_event.fpath_str(1)?)?,
             },
-            event_types::GENE_START => {
-                let creator_pid = c_event.get_spare::<i32>(0);
-                EventArgs::Start { creator_pid }
-            }
-            event_types::GENE_EXIT => EventArgs::Exit,
+            event_types::SYSCALL_CHDIR => EventArgs::ChDir {
+                dpath: actor.resolve_path_str(&c_event.fpath_str(1)?)?,
+            },
+            event_types::GENE_START | event_types::GENE_EXIT => Self::from(c_event)?.args,
             _ => bail!("unsupported event"),
         };
 

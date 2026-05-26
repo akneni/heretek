@@ -4,7 +4,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -44,6 +44,8 @@ pub struct ActorMd {
     // This is the CLI arguments of the
     pub argv: Vec<Option<Vec<String>>>,
 
+    pub cwd: Option<PathBuf>,
+
     // This is the set of all unique profiles that this process has ever had.
     // If multiple binaries executed with the same profile, then this list will be less than `n`
     // elements log
@@ -64,6 +66,7 @@ impl ActorMd {
             binary: vec![],
             profile: HashSet::new(),
             argv: vec![],
+            cwd: None,
         }
     }
 
@@ -99,11 +102,13 @@ impl Actor {
             .context("failed to get /proc/<pid>/exe (likely bc this is a kthread)")?;
 
         let cmd_args = Self::get_cmdline(pid).ok();
+        let cwd = Self::get_cwd(pid).ok();
 
         let mut actor = Self::new(pid, start_time);
 
         actor.actor_md.binary.push(exe_path);
         actor.actor_md.argv.push(cmd_args);
+        actor.actor_md.cwd = cwd;
 
         Ok(actor)
     }
@@ -119,19 +124,21 @@ impl Actor {
             .collect())
     }
 
+    fn get_cwd(pid: i32) -> Result<PathBuf> {
+        let path = format!("/proc/{}/cwd", pid);
+        Ok(fs::canonicalize(&path)?)
+    }
+
     pub fn resolve_path_str(&self, fpath: &str) -> Result<PathBuf> {
         if fpath.starts_with("/") {
             let fpath_full = fs::canonicalize(fpath).unwrap_or(PathBuf::from(fpath));
             return Ok(fpath_full);
         }
 
-        let cwd_str = format!("/proc/{}/cwd", self.id.pid);
-        let cwd = fs::canonicalize(&cwd_str).context(format!(
-            "Failed to match {} while opening {}\nActor: {:#?}",
-            cwd_str, fpath, self.actor_md
-        ))?;
-
-        let mut fullpath = cwd.join(fpath);
+        let mut fullpath = match &self.actor_md.cwd {
+            Some(r) => r.join(fpath),
+            None => bail!("actor has no cwd"),
+        };
         fullpath = fs::canonicalize(&fullpath).unwrap_or(fullpath);
         Ok(fullpath)
     }
@@ -155,10 +162,16 @@ impl Actor {
             EventArgs::Rename { src, dst } => self.handle_rename(config, src, dst),
             EventArgs::Execve { binary } => {
                 if child_owned {
-                    PolicyVerdict::Benign
-                } else {
-                    self.handle_execve_mdupdate(config, binary)
+                    return PolicyVerdict::Benign;
                 }
+                self.handle_execve_mdupdate(config, binary)
+            }
+            EventArgs::ChDir { dpath } => {
+                if child_owned {
+                    return PolicyVerdict::Benign;
+                }
+                self.actor_md.cwd = Some(dpath.clone());
+                PolicyVerdict::Benign
             }
             EventArgs::Exit => {
                 if !child_owned {

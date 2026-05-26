@@ -157,6 +157,7 @@ impl PGraph {
 
         creator.child_tuids.insert(actor.id);
         let unchained_chain = creator.unchained_chain && actor.actor_md.profile.is_empty();
+        let cwd = creator.actor.actor_md.cwd.clone();
 
         // Update pid map
         let entry = self.pid_map.entry(actor.id.pid);
@@ -166,6 +167,7 @@ impl PGraph {
         // Insert actor into the nodes map
         let mut pnode = PGraphNode::new(actor, Some(creator_tuid));
         pnode.unchained_chain = unchained_chain;
+        pnode.actor.actor_md.cwd = cwd;
         self.nodes.insert(pnode.actor.id, pnode);
     }
 
