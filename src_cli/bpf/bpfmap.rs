@@ -10,7 +10,6 @@ use aya::{
 };
 
 use crate::build_params;
-use crate::pgraph::Event;
 
 const EVENT_BUFFER_SLOTS: u64 = 1 << build_params::RING_BUF_SIZE_LOG2;
 const EVENT_METADATA_SLOT: u32 = EVENT_BUFFER_SLOTS as u32;
@@ -89,7 +88,7 @@ impl BpfEventArrayReader {
         Ok(reader)
     }
 
-    pub fn poll(&mut self, events: &mut Vec<Event>) -> Result<(), Box<dyn Error>> {
+    pub fn poll(&mut self, events: &mut Vec<CEvent>) -> Result<(), Box<dyn Error>> {
         let heads = self.read_heads()?;
 
         if self.tails.len() != heads.len() {
@@ -108,10 +107,7 @@ impl BpfEventArrayReader {
                 let cpu_slots = self.map.get(&slot_idx, 0)?;
                 let c_event = unsafe { CEvent::from_bytes(&cpu_slots[cpu].bytes) };
 
-                match Event::from(c_event) {
-                    Ok(r) => events.push(r),
-                    Err(e) => eprintln!("Error parsing CEvent: {}", e),
-                };
+                events.push(*c_event);
 
                 self.tails[cpu] += 1;
             }

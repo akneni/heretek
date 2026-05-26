@@ -1,7 +1,7 @@
 mod ipc;
 mod uds_utils;
 
-use std::{env, os::unix::net::UnixListener};
+use std::os::unix::net::UnixListener;
 
 use anyhow::{Context, Result, bail};
 pub use ipc::*;

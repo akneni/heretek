@@ -1,7 +1,7 @@
 use std::{
     collections::{HashMap, HashSet},
     fs,
-    path::PathBuf,
+    path::{Path, PathBuf},
 };
 
 use anyhow::{Context, Result};
@@ -9,8 +9,9 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     detection::{PolicyVerdict, Protectee},
-    pgraph::AccessType,
+    pgraph::{AccessType, Event, EventArgs},
     uinterf::Config,
+    utils,
 };
 
 /// Actor Temporally Unique ID
@@ -26,7 +27,7 @@ pub enum ActorState {
     Exited,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct ActorSummary {
     pub events: HashMap<Protectee, AccessType>,
 }
@@ -85,9 +86,7 @@ impl Actor {
                 start_ktime: start_time,
             },
             actor_md: ActorMd::new(),
-            summary: ActorSummary {
-                events: HashMap::new(),
-            },
+            summary: ActorSummary::default(),
         }
     }
 
@@ -119,54 +118,96 @@ impl Actor {
             .map(|s| String::from_utf8_lossy(s).into_owned())
             .collect())
     }
+
+    pub fn resolve_path_str(&self, fpath: &str) -> Result<PathBuf> {
+        if fpath.starts_with("/") {
+            let fpath_full = fs::canonicalize(fpath).unwrap_or(PathBuf::from(fpath));
+            return Ok(fpath_full);
+        }
+
+        let cwd_str = format!("/proc/{}/cwd", self.id.pid);
+        let cwd = fs::canonicalize(&cwd_str).context(format!(
+            "Failed to match {} while opening {}\nActor: {:#?}",
+            cwd_str, fpath, self.actor_md
+        ))?;
+
+        let mut fullpath = cwd.join(fpath);
+        fullpath = fs::canonicalize(&fullpath).unwrap_or(fullpath);
+        Ok(fullpath)
+    }
 }
 
 /// This block of functoins are event handlers
 /// Each of these return a PolicyVerdict type
 impl Actor {
+    pub fn handle_event(
+        &mut self,
+        config: &Config,
+        event: &Event,
+        child_owned: bool,
+    ) -> PolicyVerdict {
+        match &event.args {
+            EventArgs::Mmap { fpath, mode } => {
+                self.handle_mmap(config, fpath.as_ref().map(|x| x.as_path()), *mode)
+            }
+            EventArgs::Openat { fpath, mode } => self.handle_openat(config, fpath, *mode),
+            EventArgs::ConnectUds { fpath } => self.handle_connect_uds(config, fpath),
+            EventArgs::Rename { src, dst } => self.handle_rename(config, src, dst),
+            EventArgs::Execve { binary } => {
+                if child_owned {
+                    PolicyVerdict::Benign
+                } else {
+                    self.handle_execve_mdupdate(config, binary)
+                }
+            }
+            EventArgs::Exit => {
+                if !child_owned {
+                    self.actor_md.state = ActorState::Exited;
+                }
+                PolicyVerdict::Benign
+            }
+            EventArgs::Start {
+                #[allow(unused)]
+                creator_pid,
+            } => {
+                panic!("Not supported");
+            }
+        }
+    }
+
     pub fn handle_openat(
         &mut self,
         config: &Config,
-        fpath: String,
+        fpath: &Path,
         mode: AccessType,
     ) -> PolicyVerdict {
-        let ffpath = match fs::canonicalize(&fpath) {
-            Ok(r) => r,
-            Err(_e) => {
-                return PolicyVerdict::Benign;
-            }
-        };
-        let protectee = Protectee::File(ffpath.clone());
+        if cfg!(debug_assertions) {
+            utils::assert_canonical(fpath);
+        }
+
+        let protectee = Protectee::File(fpath.to_path_buf());
 
         let entry = self.summary.events.entry(protectee);
-        let v = entry.or_insert(mode);
-        v.union(mode);
+        let v = *entry.and_modify(|x| x.union(mode)).or_insert(mode);
 
-        config
-            .acl
-            .check_violation(&self.actor_md.profile, &ffpath, *v)
+        config.acl.check_violation(&self, fpath, v)
     }
 
-    pub fn handle_connect_uds(&mut self, config: &Config, fpath: String) -> PolicyVerdict {
-        let ffpath = match fs::canonicalize(&fpath) {
-            Ok(r) => r,
-            Err(_e) => {
-                return PolicyVerdict::Benign;
-            }
-        };
-        let protectee = Protectee::File(ffpath.clone());
+    pub fn handle_connect_uds(&mut self, config: &Config, fpath: &Path) -> PolicyVerdict {
+        if cfg!(debug_assertions) {
+            utils::assert_canonical(fpath);
+        }
+
+        let protectee = Protectee::File(fpath.to_path_buf());
         let mode = AccessType::from_str("----c").unwrap();
 
         let entry = self.summary.events.entry(protectee);
-        let v = entry.or_insert(mode);
-        v.union(mode);
+        let v = *entry.and_modify(|x| x.union(mode)).or_insert(mode);
 
-        config
-            .acl
-            .check_violation(&self.actor_md.profile, &ffpath, *v)
+        config.acl.check_violation(&self, fpath, v)
     }
 
-    pub fn handle_rename(&mut self, config: &Config, src: String, dest: String) -> PolicyVerdict {
+    pub fn handle_rename(&mut self, config: &Config, src: &Path, dest: &Path) -> PolicyVerdict {
         self.handle_openat(config, src, AccessType::from_str("rw-").unwrap())
             | self.handle_openat(config, dest, AccessType::from_str("rw-").unwrap())
     }
@@ -174,7 +215,7 @@ impl Actor {
     pub fn handle_mmap(
         &mut self,
         config: &Config,
-        fpath: Option<String>,
+        fpath: Option<&Path>,
         mode: AccessType,
     ) -> PolicyVerdict {
         if let Some(fpath) = fpath {
@@ -183,7 +224,8 @@ impl Actor {
         PolicyVerdict::Benign
     }
 
-    pub fn handle_execve(&mut self, config: &Config, binary: String) -> PolicyVerdict {
+    /// Handle execve metadata update
+    pub fn handle_execve_mdupdate(&mut self, config: &Config, binary: &Path) -> PolicyVerdict {
         // TODO: Determine the correct way to get the binary path
         let binary_path = match fs::canonicalize(&binary) {
             Ok(r) => r,

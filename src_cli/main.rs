@@ -22,6 +22,7 @@ mod uinterf;
 
 mod build_params;
 mod perftracker;
+mod utils;
 
 fn preflight() -> Result<Config> {
     if "root" != whoami::account()? {
@@ -91,7 +92,9 @@ fn daemon(config: &Config) {
 
         // 2) Run checks against the ACL to check for violations
         for event in events.into_iter() {
-            pgraph::handle_event(config, &mut pgraph_db, event);
+            if let Err(e) = pgraph::handle_event(config, &mut pgraph_db, &event) {
+                eprintln!("Error handling event: {}", e);
+            }
         }
         events = vec![];
 

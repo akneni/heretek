@@ -1,8 +1,11 @@
-use std::fmt;
+use std::{fmt, path::PathBuf};
 
 use anyhow::{Result, bail};
 
-use crate::{bpf::CEvent, bpf::event_types};
+use crate::{
+    bpf::{CEvent, event_types},
+    pgraph::Actor,
+};
 
 #[derive(Default, Clone, Copy, Hash)]
 pub struct AccessType {
@@ -25,22 +28,22 @@ pub struct Event {
 pub enum EventArgs {
     // System Calls
     Execve {
-        binary: String,
+        binary: PathBuf,
     },
     Openat {
-        fpath: String,
+        fpath: PathBuf,
         mode: AccessType,
     },
     Mmap {
-        fpath: Option<String>,
+        fpath: Option<PathBuf>,
         mode: AccessType,
     },
     ConnectUds {
-        fpath: String,
+        fpath: PathBuf,
     },
     Rename {
-        src: String,
-        dst: String,
+        src: PathBuf,
+        dst: PathBuf,
     },
 
     // Generic Events
@@ -161,16 +164,6 @@ impl AccessType {
 impl Event {
     pub fn from(c_event: &CEvent) -> Result<Self> {
         let args = match c_event.event {
-            event_types::SYSCALL_OPENAT => EventArgs::Openat {
-                fpath: c_event.fpath_str(1)?,
-                mode: AccessType::from_spare(c_event.spare[0]),
-            },
-            event_types::GENE_CONNECT_UDS => EventArgs::ConnectUds {
-                fpath: c_event.fpath_str(1)?,
-            },
-            event_types::SYSCALL_EXECVE => EventArgs::Execve {
-                binary: c_event.fpath_str(1)?,
-            },
             event_types::GENE_START => {
                 let creator_pid = c_event.get_spare::<i32>(0);
                 EventArgs::Start { creator_pid }
@@ -185,10 +178,31 @@ impl Event {
             args,
         })
     }
-}
 
-impl EventArgs {
-    pub fn is_complex(&self) -> bool {
-        matches!(self, Self::Start { .. } | Self::Exit)
+    pub fn from_resolve(c_event: &CEvent, actor: &Actor) -> Result<Self> {
+        let args = match c_event.event {
+            event_types::SYSCALL_OPENAT => EventArgs::Openat {
+                fpath: actor.resolve_path_str(&c_event.fpath_str(1)?)?,
+                mode: AccessType::from_spare(c_event.spare[0]),
+            },
+            event_types::GENE_CONNECT_UDS => EventArgs::ConnectUds {
+                fpath: actor.resolve_path_str(&c_event.fpath_str(1)?)?,
+            },
+            event_types::SYSCALL_EXECVE => EventArgs::Execve {
+                binary: actor.resolve_path_str(&c_event.fpath_str(1)?)?,
+            },
+            event_types::GENE_START => {
+                let creator_pid = c_event.get_spare::<i32>(0);
+                EventArgs::Start { creator_pid }
+            }
+            event_types::GENE_EXIT => EventArgs::Exit,
+            _ => bail!("unsupported event"),
+        };
+
+        Ok(Self {
+            pid: c_event.pid,
+            ktime: c_event.ktime,
+            args,
+        })
     }
 }

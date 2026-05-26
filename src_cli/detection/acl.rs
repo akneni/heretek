@@ -6,7 +6,7 @@ use std::fs;
 use std::path::Path;
 
 use crate::detection::{AclJsonFile, AclProfileJsonFile, PolicyVerdict, Protectee};
-use crate::pgraph::AccessType;
+use crate::pgraph::{AccessType, Actor};
 
 #[derive(Clone, Default)]
 pub struct ProfAccessRules {
@@ -137,12 +137,8 @@ impl Acl {
 
     /// Top level function for detecting violations
     /// If any one of the profiles accessed the file in a way that is not permitted, then its a violation
-    pub fn check_violation(
-        &self,
-        profiles: &HashSet<String>,
-        file: &Path,
-        mode: AccessType,
-    ) -> PolicyVerdict {
+    pub fn check_violation(&self, actor: &Actor, file: &Path, mode: AccessType) -> PolicyVerdict {
+        let profiles = &actor.actor_md.profile;
         for prof in profiles.iter() {
             let access_list = match self.profiles.get(prof) {
                 Some(r) => r,
@@ -157,6 +153,7 @@ impl Acl {
             let allowed_atype = access_list.get_atype_file(file);
             if !allowed_atype.is_superset_of(mode) {
                 return PolicyVerdict::Violation {
+                    tuid: actor.id,
                     prote: Protectee::File(file.to_path_buf()),
                     attempted_access: mode,
                     allowed_access: allowed_atype,

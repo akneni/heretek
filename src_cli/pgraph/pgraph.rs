@@ -117,11 +117,75 @@ impl PGraph {
         }
     }
 
+    /// Returns the most recent actor with the PID passed
+    /// Note, this does not guarantee that the actor is alive
+    pub fn get_latest_mut(&mut self, pid: i32) -> Option<&mut PGraphNode> {
+        let start_ktime = *self.pid_map.get(&pid)?.iter().last()?;
+        let tuid = ActorTuid { pid, start_ktime };
+        self.nodes.get_mut(&tuid)
+    }
+
+    /// Returns the Node whose actor has the same PID as the one passed and the lastest start time
+    /// that comes before the start time passed.
+    pub fn get_latest_prior_mut(&mut self, pid: i32, ktime: u64) -> Option<&mut PGraphNode> {
+        let ktime_vec = self.pid_map.get(&pid)?;
+        let mut real_ktime = None;
+        for &kt in ktime_vec.iter().rev() {
+            if kt < ktime {
+                real_ktime = Some(kt);
+                break;
+            }
+        }
+
+        let tuid = ActorTuid {
+            pid,
+            start_ktime: real_ktime.unwrap(),
+        };
+        self.nodes.get_mut(&tuid)
+    }
+
+    /// Inserts the actor into the PGraph data structure
+    /// This makes sure to update the creator PGraphNode and pid_map to keep everything consistent
+    pub fn insert_actor(&mut self, actor: Actor, creator_tuid: ActorTuid) {
+        // Update creator's child vec
+        let creator = match self.nodes.get_mut(&creator_tuid) {
+            Some(r) => r,
+            None => {
+                panic!("insert_actor called with a creator_tuid that doesn't exist");
+            }
+        };
+
+        creator.child_tuids.insert(actor.id);
+        let unchained_chain = creator.unchained_chain && actor.actor_md.profile.is_empty();
+
+        // Update pid map
+        let entry = self.pid_map.entry(actor.id.pid);
+        let ktimes = entry.or_default();
+        ktimes.push_back(actor.id.start_ktime);
+
+        // Insert actor into the nodes map
+        let mut pnode = PGraphNode::new(actor, Some(creator_tuid));
+        pnode.unchained_chain = unchained_chain;
+        self.nodes.insert(pnode.actor.id, pnode);
+    }
+
+    #[allow(unused)]
+    fn get_or_create(&mut self, tuid: ActorTuid) -> &mut PGraphNode {
+        let entry = self.nodes.entry(tuid);
+        entry.or_insert_with(|| {
+            let actor = Actor::new(tuid.pid, tuid.start_ktime);
+            PGraphNode::new(actor, None)
+        })
+    }
+}
+
+/// This block only contains from_existing_processes and its helper functions
+impl PGraph {
     /// Scans the /proc directory and constructs the Pgraph (in a best effort manner)
     /// It will assume that the parent ID of a process is the creator ID.
     pub fn from_existing_processes(config: &Config) -> Self {
         let mut pgraph = Self::new();
-        let hz = match clock_ticks_per_second() {
+        let hz = match Self::clock_ticks_per_second() {
             Ok(hz) => hz,
             Err(_) => return pgraph,
         };
@@ -143,7 +207,7 @@ impl PGraph {
                 continue;
             };
 
-            let Ok((ppid, start_ktime)) = read_proc_stat(pid, hz) else {
+            let Ok((ppid, start_ktime)) = Self::read_proc_stat(pid, hz) else {
                 continue;
             };
 
@@ -201,58 +265,40 @@ impl PGraph {
         pgraph
     }
 
-    /// Returns the most recent actor with the PID passed
-    /// Note, this does not guarantee that the actor is alive
-    pub fn get_latest_mut(&mut self, pid: i32) -> Option<&mut PGraphNode> {
-        let start_ktime = *self.pid_map.get(&pid)?.iter().last()?;
-        let tuid = ActorTuid { pid, start_ktime };
-        self.nodes.get_mut(&tuid)
-    }
-
-    /// Returns the Node whose actor has the same PID as the one passed and the lastest start time
-    /// that comes before the start time passed.
-    pub fn get_latest_prior_mut(&mut self, pid: i32, ktime: u64) -> Option<&mut PGraphNode> {
-        let ktime_vec = self.pid_map.get(&pid)?;
-        let mut real_ktime = None;
-        for &kt in ktime_vec.iter().rev() {
-            if kt < ktime {
-                real_ktime = Some(kt);
-                break;
-            }
+    fn compute_bootstrap_unchained_chain(
+        tuid: ActorTuid,
+        nodes: &HashMap<ActorTuid, PGraphNode>,
+        memo: &mut HashMap<ActorTuid, bool>,
+        visiting: &mut HashSet<ActorTuid>,
+    ) -> bool {
+        if let Some(&unchained_chain) = memo.get(&tuid) {
+            return unchained_chain;
         }
 
-        let tuid = ActorTuid {
-            pid,
-            start_ktime: real_ktime.unwrap(),
+        if !visiting.insert(tuid) {
+            return false;
+        }
+
+        let Some(node) = nodes.get(&tuid) else {
+            visiting.remove(&tuid);
+            memo.insert(tuid, false);
+            return false;
         };
-        self.nodes.get_mut(&tuid)
-    }
 
-    /// Inserts the actor into the PGraph data structure
-    /// This makes sure to update the creator PGraphNode and pid_map to keep everything consistent
-    pub fn insert_actor(&mut self, actor: Actor, creator_tuid: ActorTuid) {
-        // Update creator's child vec
-        let creator = self.get_or_create(creator_tuid);
-        creator.child_tuids.insert(actor.id);
-        let unchained_chain = creator.unchained_chain && actor.actor_md.profile.is_empty();
+        let has_only_unchained_profile = node.actor.actor_md.profile.len() == 1
+            && node.actor.actor_md.profile.contains("unchained");
+        let parent_unchained_chain = match node.creator_tuid {
+            Some(creator_tuid) => {
+                Self::compute_bootstrap_unchained_chain(creator_tuid, nodes, memo, visiting)
+            }
+            None => node.actor.id.pid == 1,
+        };
+        let unchained_chain = has_only_unchained_profile && parent_unchained_chain;
 
-        // Update pid map
-        let entry = self.pid_map.entry(actor.id.pid);
-        let ktimes = entry.or_default();
-        ktimes.push_back(actor.id.start_ktime);
+        visiting.remove(&tuid);
+        memo.insert(tuid, unchained_chain);
 
-        // Insert actor into the nodes map
-        let mut pnode = PGraphNode::new(actor, Some(creator_tuid));
-        pnode.unchained_chain = unchained_chain;
-        self.nodes.insert(pnode.actor.id, pnode);
-    }
-
-    fn get_or_create(&mut self, tuid: ActorTuid) -> &mut PGraphNode {
-        let entry = self.nodes.entry(tuid);
-        entry.or_insert_with(|| {
-            let actor = Actor::new(tuid.pid, tuid.start_ktime);
-            PGraphNode::new(actor, None)
-        })
+        unchained_chain
     }
 
     fn update_bootstrap_unchained_chains(&mut self) {
@@ -260,81 +306,49 @@ impl PGraph {
         let mut visiting = HashSet::new();
 
         for tuid in self.nodes.keys().copied().collect::<Vec<_>>() {
-            let unchained_chain =
-                compute_bootstrap_unchained_chain(tuid, &self.nodes, &mut memo, &mut visiting);
+            let unchained_chain = Self::compute_bootstrap_unchained_chain(
+                tuid,
+                &self.nodes,
+                &mut memo,
+                &mut visiting,
+            );
             if let Some(node) = self.nodes.get_mut(&tuid) {
                 node.unchained_chain = unchained_chain;
             }
         }
     }
-}
 
-fn compute_bootstrap_unchained_chain(
-    tuid: ActorTuid,
-    nodes: &HashMap<ActorTuid, PGraphNode>,
-    memo: &mut HashMap<ActorTuid, bool>,
-    visiting: &mut HashSet<ActorTuid>,
-) -> bool {
-    if let Some(&unchained_chain) = memo.get(&tuid) {
-        return unchained_chain;
-    }
+    fn read_proc_stat(pid: i32, hz: u64) -> io::Result<(i32, u64)> {
+        let stat = fs::read_to_string(format!("/proc/{pid}/stat"))?;
+        let after_comm = stat
+            .rsplit_once(") ")
+            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "bad /proc stat format"))?
+            .1;
 
-    if !visiting.insert(tuid) {
-        return false;
-    }
-
-    let Some(node) = nodes.get(&tuid) else {
-        visiting.remove(&tuid);
-        memo.insert(tuid, false);
-        return false;
-    };
-
-    let has_only_unchained_profile =
-        node.actor.actor_md.profile.len() == 1 && node.actor.actor_md.profile.contains("unchained");
-    let parent_unchained_chain = match node.creator_tuid {
-        Some(creator_tuid) => {
-            compute_bootstrap_unchained_chain(creator_tuid, nodes, memo, visiting)
+        let fields = after_comm.split_whitespace().collect::<Vec<_>>();
+        if fields.len() <= 19 {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "missing /proc stat fields",
+            ));
         }
-        None => node.actor.id.pid == 1,
-    };
-    let unchained_chain = has_only_unchained_profile && parent_unchained_chain;
 
-    visiting.remove(&tuid);
-    memo.insert(tuid, unchained_chain);
+        let ppid = fields[1]
+            .parse::<i32>()
+            .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "invalid ppid field"))?;
+        let starttime_ticks = fields[19]
+            .parse::<u64>()
+            .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "invalid starttime field"))?;
 
-    unchained_chain
-}
-
-fn read_proc_stat(pid: i32, hz: u64) -> io::Result<(i32, u64)> {
-    let stat = fs::read_to_string(format!("/proc/{pid}/stat"))?;
-    let after_comm = stat
-        .rsplit_once(") ")
-        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "bad /proc stat format"))?
-        .1;
-
-    let fields = after_comm.split_whitespace().collect::<Vec<_>>();
-    if fields.len() <= 19 {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidData,
-            "missing /proc stat fields",
-        ));
+        Ok((ppid, starttime_ticks.saturating_mul(1_000_000_000) / hz))
     }
 
-    let ppid = fields[1]
-        .parse::<i32>()
-        .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "invalid ppid field"))?;
-    let starttime_ticks = fields[19]
-        .parse::<u64>()
-        .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "invalid starttime field"))?;
+    fn clock_ticks_per_second() -> io::Result<u64> {
+        let hz = unsafe { libc::sysconf(libc::_SC_CLK_TCK) };
+        if hz <= 0 {
+            return Err(io::Error::other("sysconf(_SC_CLK_TCK) failed"));
+        }
 
-    Ok((ppid, starttime_ticks.saturating_mul(1_000_000_000) / hz))
-}
-
-fn clock_ticks_per_second() -> io::Result<u64> {
-    let hz = unsafe { libc::sysconf(libc::_SC_CLK_TCK) };
-    if hz <= 0 {
-        return Err(io::Error::other("sysconf(_SC_CLK_TCK) failed"));
+        Ok(hz as u64)
     }
-
-    Ok(hz as u64)
 }

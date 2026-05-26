@@ -1,12 +1,16 @@
 use std::ops::BitOr;
 
-use crate::{detection::Protectee, pgraph::AccessType};
+use crate::{
+    detection::Protectee,
+    pgraph::{AccessType, ActorTuid},
+};
 
 #[allow(unused)]
 #[derive(Debug, Clone)]
 pub enum PolicyVerdict {
     Benign,
     Violation {
+        tuid: ActorTuid,
         prote: Protectee,
         attempted_access: AccessType,
         allowed_access: AccessType,
