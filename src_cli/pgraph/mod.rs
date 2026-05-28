@@ -9,6 +9,7 @@ pub use pgraph::*;
 
 use crate::bpf::{CEvent, event_types};
 use crate::detection::PolicyVerdict;
+use crate::response::handle_response;
 use crate::uinterf::Config;
 
 /// This is the bulk of this program.
@@ -95,25 +96,5 @@ fn handle_simple_event(config: &Config, pgraph: &mut PGraph, cevent: &CEvent) {
         child_owned = true;
     }
 
-    for violation in &violations {
-        match violation {
-            PolicyVerdict::Violation {
-                tuid,
-                #[allow(unused)]
-                prote,
-                #[allow(unused)]
-                attempted_access,
-                #[allow(unused)]
-                allowed_access,
-            } => {
-                let actor_desc = pgraph.nodes.get(tuid).unwrap();
-                println!(
-                    "violation:\n{:?}\n\nActor:\n{}\n\n\n",
-                    violation,
-                    actor_desc.to_str(1)
-                );
-            }
-            _ => {}
-        };
-    }
+    handle_response(config, pgraph, &violations);
 }

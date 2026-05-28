@@ -1,7 +1,4 @@
-use std::{
-    fmt,
-    path::{Path, PathBuf},
-};
+use std::{fmt, path::PathBuf};
 
 use anyhow::{Result, bail};
 
