@@ -5,6 +5,8 @@ use clap::{Arg, ArgMatches, Command as ClapCommand};
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CliCommand {
     Daemon,
+    Bringup,
+    Bringdown,
     SummaryPid { pid: i32 },
     SummaryExe { exe_path: String },
     SetProfile { profile: String, pid: i32 },
@@ -30,6 +32,8 @@ pub fn command() -> ClapCommand {
         .subcommand_required(true)
         .arg_required_else_help(true)
         .subcommand(ClapCommand::new("daemon").about("Run the Heretek daemon"))
+        .subcommand(ClapCommand::new("bringup").about("Bring up the Heretek daemon"))
+        .subcommand(ClapCommand::new("bringdown").about("Bring down the Heretek daemon"))
         .subcommand(
             ClapCommand::new("debug-action")
                 .about("Run a debug action")
@@ -68,6 +72,8 @@ impl CliCommand {
     fn from_matches(matches: &ArgMatches) -> Self {
         match matches.subcommand() {
             Some(("daemon", _)) => Self::Daemon,
+            Some(("bringup", _)) => Self::Bringup,
+            Some(("bringdown", _)) => Self::Bringdown,
             Some(("debug-action", _)) => Self::DebugAction,
             Some(("summary", sub_matches)) => {
                 let target = sub_matches
@@ -112,6 +118,20 @@ mod tests {
         let cli = parse_from(["htek", "daemon"]);
 
         assert_eq!(cli, CliCommand::Daemon);
+    }
+
+    #[test]
+    fn parses_bringup_command() {
+        let cli = parse_from(["htek", "bringup"]);
+
+        assert_eq!(cli, CliCommand::Bringup);
+    }
+
+    #[test]
+    fn parses_bringdown_command() {
+        let cli = parse_from(["htek", "bringdown"]);
+
+        assert_eq!(cli, CliCommand::Bringdown);
     }
 
     #[test]

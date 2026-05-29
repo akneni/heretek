@@ -1,7 +1,7 @@
 mod ipc;
 mod uds_utils;
 
-use std::os::unix::net::UnixListener;
+use std::{os::unix::net::UnixListener, process};
 
 use anyhow::{Context, Result, bail};
 pub use ipc::*;
@@ -88,6 +88,12 @@ pub fn handle_rpc(config: &Config, pgraph_db: &mut PGraph, socket: &UnixListener
             }
             let res = RpcResult::DebugActionRes(payload);
             res.stream_send(stream)?;
+        }
+        Rpc::Bringdown { unload_bpf } => {
+            if unload_bpf {
+                eprintln!("Unloading BPF is not yet implemented");
+            }
+            process::exit(0);
         }
     }
     Ok(())

@@ -1,5 +1,7 @@
 use std::{
-    fs, process, thread,
+    env, fs,
+    process::{self, Stdio},
+    thread,
     time::{Duration, Instant},
 };
 
@@ -56,6 +58,49 @@ fn preflight() -> Result<Config> {
 
     let cfg = Config::from(config_file, acl);
     Ok(cfg)
+}
+
+fn bringup(config: &Config) {
+    if let Err(e) = bpf::load_bpf_objects(config) {
+        eprintln!("Error loading eBPF objects: {}", e);
+        process::exit(1);
+    }
+
+    let bin = env::args().next().unwrap();
+    let cmd = process::Command::new(&bin)
+        .arg("daemon")
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn();
+
+    match cmd {
+        Ok(_) => println!("Spawned daemon successfully!"),
+        Err(e) => eprintln!("An error occured while spawning the daemon:\n{}", e),
+    }
+}
+
+fn bringdown(config: &Config) {
+    let stream = rpc::connect_uds_ipc(&config);
+    let rpc = rpc::Rpc::Bringdown { unload_bpf: false };
+    rpc.stream_send(&stream).unwrap();
+    match RpcResult::stream_recv(&stream) {
+        Ok(r) => match r {
+            rpc::RpcResult::BringdownRes(s) => {
+                println!("{}", s);
+                process::exit(1);
+            }
+            _ => unreachable!(),
+        },
+        Err(_e) => {
+            println!("Heretek daemon exited!");
+        }
+    };
+
+    if let Err(e) = bpf::unload_bpf_objects(config) {
+        eprintln!("Failed to unload eBPF objects: {}", e);
+        process::exit(1);
+    }
 }
 
 fn daemon(config: &Config) {
@@ -136,6 +181,12 @@ fn main() {
     let cli_cmd = uinterf::parse_cli();
 
     match cli_cmd {
+        CliCommand::Bringup => {
+            bringup(&config);
+        }
+        CliCommand::Bringdown => {
+            bringdown(&config);
+        }
         CliCommand::Daemon => {
             daemon(&config);
         }

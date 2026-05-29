@@ -14,6 +14,7 @@ use crate::{
 pub struct Config {
     pub profile_config: ProfileConfig,
     pub quarentine: Vec<String>,
+    pub htek_repo: Option<String>,
     pub acl: Acl,
 }
 
@@ -29,6 +30,7 @@ impl Config {
         Self {
             profile_config: ProfileConfig::from(&cfg_file.profile_config),
             quarentine: cfg_file.quarentine,
+            htek_repo: cfg_file.htek_repo,
             acl,
         }
     }

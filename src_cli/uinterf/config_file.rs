@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 pub struct ConfigFile {
     pub profile_config: ProfileConfigFile,
     pub quarentine: Vec<String>,
+    pub htek_repo: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -29,6 +30,7 @@ impl Default for ConfigFile {
                 profiles,
             },
             quarentine: vec!["kill".to_string(), "quarentine".to_string()],
+            htek_repo: None,
         }
     }
 }

@@ -16,6 +16,9 @@ pub enum Rpc {
     // and removes all other profiles.
     SetProfile { profile: String, pid: i32 },
 
+    // Shut down the daemon
+    Bringdown { unload_bpf: bool },
+
     // A debugging mechanism to get some arbitrary RPC to run while debugging.
     DebugAction,
 }
@@ -24,6 +27,7 @@ pub enum Rpc {
 pub enum RpcResult {
     GetSummary(String),
     SetProfileRes { msg: String, success: bool },
+    BringdownRes(String),
     DebugActionRes(String),
 }
 
