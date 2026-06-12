@@ -1,7 +1,8 @@
 use std::{
     collections::HashSet,
-    fs::File,
+    fs::{self, File},
     io::{self, Seek, Write},
+    path::PathBuf,
 };
 
 use directories::ProjectDirs;
@@ -72,6 +73,35 @@ pub fn handle_response(config: &Config, pgraph_db: &PGraph, violations: &[Policy
         if config.quarentine.contains(&"terminate".to_string()) {
             terminate(pgraph_db, node);
         }
+    }
+}
+
+fn alert_log_path() -> PathBuf {
+    let proj = ProjectDirs::from("com", "heretek", "heretek").unwrap();
+    proj.data_dir().join("alerts.log")
+}
+
+pub fn init_alert_log(config: &Config) {
+    let alert_log = alert_log_path();
+    let mut alert_bak = alert_log.clone();
+    alert_bak.pop();
+    alert_bak.push("alerts_bak.log");
+
+    if alert_log.exists() {
+        let alets = fs::read_to_string(&alert_log).unwrap();
+
+        let mut fp = File::options()
+            .create(true)
+            .append(true)
+            .open(&alert_bak)
+            .unwrap();
+
+        fp.write(alets.as_bytes()).unwrap();
+        fp.write(b"\n\n").unwrap();
+        drop(fp);
+
+        fs::remove_file(&alert_log).unwrap();
+        fs::write(&alert_log, "").unwrap();
     }
 }
 
@@ -168,8 +198,7 @@ fn log(
 
         println!("{}", alert);
 
-        let proj = ProjectDirs::from("com", "heretek", "heretek").unwrap();
-        let alert_path = proj.data_dir().join("alerts.log");
+        let alert_path = alert_log_path();
         println!("{}", alert_path.display());
         let mut fp = File::options()
             .write(true)

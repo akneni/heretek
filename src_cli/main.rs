@@ -61,6 +61,8 @@ fn preflight() -> Result<Config> {
 }
 
 fn bringup(config: &Config) {
+    rpc::check_uds_ipc_inuse(config);
+
     if let Err(e) = bpf::load_bpf_objects(config) {
         eprintln!("Error loading eBPF objects: {}", e);
         process::exit(1);
@@ -81,20 +83,24 @@ fn bringup(config: &Config) {
 }
 
 fn bringdown(config: &Config) {
-    let stream = rpc::connect_uds_ipc(&config);
-    let rpc = rpc::Rpc::Bringdown { unload_bpf: false };
-    rpc.stream_send(&stream).unwrap();
-    match RpcResult::stream_recv(&stream) {
-        Ok(r) => match r {
-            rpc::RpcResult::BringdownRes(s) => {
-                println!("{}", s);
-                process::exit(1);
-            }
-            _ => unreachable!(),
-        },
-        Err(_e) => {
-            println!("Heretek daemon exited!");
+    match rpc::connect_uds_ipc(&config) {
+        Ok(stream) => {
+            let rpc = rpc::Rpc::Bringdown { unload_bpf: false };
+            rpc.stream_send(&stream).unwrap();
+            match RpcResult::stream_recv(&stream) {
+                Ok(r) => match r {
+                    rpc::RpcResult::BringdownRes(s) => {
+                        println!("{}", s);
+                        process::exit(1);
+                    }
+                    _ => unreachable!(),
+                },
+                Err(_e) => {
+                    println!("Heretek daemon exited!");
+                }
+            };
         }
+        _ => println!("Heretek daemon not running"),
     };
 
     if let Err(e) = bpf::unload_bpf_objects(config) {
@@ -104,6 +110,9 @@ fn bringdown(config: &Config) {
 }
 
 fn daemon(config: &Config) {
+    //Daemon Specific Preflight Actions
+    response::init_alert_log(config);
+
     let socket = rpc::create_uds_ipc(config);
     socket.set_nonblocking(true).unwrap();
 
@@ -191,7 +200,7 @@ fn main() {
             daemon(&config);
         }
         CliCommand::SummaryPid { pid } => {
-            let stream = rpc::connect_uds_ipc(&config);
+            let stream = rpc::connect_uds_ipc(&config).unwrap();
             let rpc = rpc::Rpc::GetSummaryPid { pid };
             rpc.stream_send(&stream).unwrap();
             let rpc_res = RpcResult::stream_recv(&stream).unwrap();
@@ -206,7 +215,7 @@ fn main() {
         }
         CliCommand::SummaryExe { exe_path } => {
             let rpc = rpc::Rpc::GetSummaryExe { exe_path };
-            let stream = rpc::connect_uds_ipc(&config);
+            let stream = rpc::connect_uds_ipc(&config).unwrap();
             rpc.stream_send(&stream).unwrap();
             let rpc_res = RpcResult::stream_recv(&stream).unwrap();
             match rpc_res {
@@ -220,7 +229,7 @@ fn main() {
         }
         CliCommand::SetProfile { profile, pid } => {
             let rpc = Rpc::SetProfile { profile, pid };
-            let stream = rpc::connect_uds_ipc(&config);
+            let stream = rpc::connect_uds_ipc(&config).unwrap();
             rpc.stream_send(&stream).unwrap();
             let rpc_res = RpcResult::stream_recv(&stream).unwrap();
             match rpc_res {
@@ -236,7 +245,7 @@ fn main() {
             }
         }
         CliCommand::DebugAction => {
-            let stream = rpc::connect_uds_ipc(&config);
+            let stream = rpc::connect_uds_ipc(&config).unwrap();
             let rpc = rpc::Rpc::DebugAction;
             rpc.stream_send(&stream).unwrap();
             let rpc_res = RpcResult::stream_recv(&stream).unwrap();
