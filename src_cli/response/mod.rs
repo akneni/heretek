@@ -81,7 +81,7 @@ fn alert_log_path() -> PathBuf {
     proj.data_dir().join("alerts.log")
 }
 
-pub fn init_alert_log(config: &Config) {
+pub fn init_alert_log(_config: &Config) {
     let alert_log = alert_log_path();
     let mut alert_bak = alert_log.clone();
     alert_bak.pop();

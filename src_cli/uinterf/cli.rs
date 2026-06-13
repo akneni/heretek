@@ -1,4 +1,4 @@
-use std::ffi::OsString;
+use std::{ffi::OsString, path::PathBuf};
 
 use clap::{Arg, ArgMatches, Command as ClapCommand};
 
@@ -10,6 +10,7 @@ pub enum CliCommand {
     SummaryPid { pid: i32 },
     SummaryExe { exe_path: String },
     SetProfile { profile: String, pid: i32 },
+    Touched { file: String },
     DebugAction,
 }
 
@@ -66,6 +67,16 @@ pub fn command() -> ClapCommand {
                         .help("PID to assign the profile to"),
                 ),
         )
+        .subcommand(
+            ClapCommand::new("touched")
+                .about("Show processes that accessed a file")
+                .arg(
+                    Arg::new("file")
+                        .value_name("file")
+                        .required(true)
+                        .help("File to query"),
+                ),
+        )
 }
 
 impl CliCommand {
@@ -94,6 +105,14 @@ impl CliCommand {
                     .expect("pid must be an integer");
 
                 Self::SetProfile { profile, pid }
+            }
+            Some(("touched", sub_matches)) => {
+                let file = sub_matches
+                    .get_one::<String>("file")
+                    .expect("clap ensures file is present")
+                    .to_string();
+
+                Self::Touched { file }
             }
             _ => unreachable!("clap ensures a valid subcommand is present"),
         }
@@ -162,6 +181,18 @@ mod tests {
             CliCommand::SetProfile {
                 profile: "hardened".to_string(),
                 pid: 1234,
+            }
+        );
+    }
+
+    #[test]
+    fn parses_touched_command() {
+        let cli = parse_from(["htek", "touched", "/tmp/example"]);
+
+        assert_eq!(
+            cli,
+            CliCommand::Touched {
+                file: "/tmp/example".to_string(),
             }
         );
     }

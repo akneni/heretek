@@ -1,6 +1,7 @@
 use std::{
     io::{Read, Write},
     mem,
+    path::PathBuf,
 };
 
 use anyhow::Result;
@@ -19,6 +20,9 @@ pub enum Rpc {
     // Shut down the daemon
     Bringdown { unload_bpf: bool },
 
+    // See who touched a file
+    Touched { file: PathBuf },
+
     // A debugging mechanism to get some arbitrary RPC to run while debugging.
     DebugAction,
 }
@@ -28,6 +32,7 @@ pub enum RpcResult {
     GetSummary(String),
     SetProfileRes { msg: String, success: bool },
     BringdownRes(String),
+    TouchedRes(String),
     DebugActionRes(String),
 }
 

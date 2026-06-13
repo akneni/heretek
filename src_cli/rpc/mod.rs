@@ -1,15 +1,22 @@
 mod ipc;
 mod uds_utils;
 
-use std::{os::unix::net::UnixListener, process};
+use std::{
+    fmt::Write,
+    os::unix::net::UnixListener,
+    path::{Path, PathBuf},
+    process,
+};
 
 use anyhow::{Context, Result, bail};
 pub use ipc::*;
 pub use uds_utils::*;
 
 use crate::{
+    detection::Protectee,
     pgraph::{ActorState, PGraph},
     uinterf::Config,
+    utils,
 };
 
 pub fn handle_rpc(config: &Config, pgraph_db: &mut PGraph, socket: &UnixListener) -> Result<()> {
@@ -72,6 +79,16 @@ pub fn handle_rpc(config: &Config, pgraph_db: &mut PGraph, socket: &UnixListener
             };
             res.stream_send(&mut stream)?;
         }
+        Rpc::Bringdown { unload_bpf } => {
+            if unload_bpf {
+                eprintln!("Unloading BPF is not yet implemented");
+            }
+            process::exit(0);
+        }
+        Rpc::Touched { file } => {
+            let res = handle_touched(pgraph_db, file);
+            res.stream_send(&stream)?;
+        }
         Rpc::DebugAction => {
             if !cfg!(debug_assertions) {
                 let res = RpcResult::DebugActionRes(
@@ -88,12 +105,6 @@ pub fn handle_rpc(config: &Config, pgraph_db: &mut PGraph, socket: &UnixListener
             }
             let res = RpcResult::DebugActionRes(payload);
             res.stream_send(stream)?;
-        }
-        Rpc::Bringdown { unload_bpf } => {
-            if unload_bpf {
-                eprintln!("Unloading BPF is not yet implemented");
-            }
-            process::exit(0);
         }
     }
     Ok(())
@@ -119,4 +130,24 @@ fn handle_set_profile(
         node.actor.actor_md.profile.insert(profile.to_string());
     }
     Ok(())
+}
+
+fn handle_touched(pgraph_db: &mut PGraph, fpath: PathBuf) -> RpcResult {
+    utils::assert_canonical_dbgo(&fpath);
+
+    let mut payload = String::new();
+    for (_, node) in pgraph_db.nodes.iter() {
+        if node.actor.actor_md.profile.contains("unchained") {
+            continue;
+        }
+
+        let p = Protectee::File(fpath.clone());
+        if let Some(atype) = node.actor.summary.events.get(&p) {
+            write!(&mut payload, "{}Access Type: ", node.to_str(1)).unwrap();
+            atype.to_rwxbc_str(&mut payload);
+            payload.push_str("\n\n");
+        }
+    }
+
+    RpcResult::TouchedRes(payload)
 }

@@ -23,7 +23,12 @@ install:
     cargo build
     sudo cp ./target/debug/htek /usr/bin/htek
 
+reinstall:
+    sudo ./target/debug/htek bringdown
+    cargo build
+    sudo cp ./target/debug/htek /usr/bin/htek
+    sudo htek bringup
+
 restart:
     sudo htek bringdown
-    sleep 2
     sudo htek bringup

@@ -245,6 +245,28 @@ fn main() {
                 }
             }
         }
+        CliCommand::Touched { file } => {
+            let fpath = match fs::canonicalize(&file) {
+                Ok(r) => r,
+                Err(e) => {
+                    eprintln!("Error finding file: {}", e);
+                    process::exit(1);
+                }
+            };
+
+            let stream = rpc::connect_uds_ipc(&config);
+            let rpc = Rpc::Touched { file: fpath };
+            rpc.stream_send(&stream).unwrap();
+            let rpc_res = RpcResult::stream_recv(&stream).unwrap();
+            match rpc_res {
+                rpc::RpcResult::TouchedRes(s) => {
+                    println!("{}", s);
+                }
+                _ => {
+                    unreachable!();
+                }
+            }
+        }
         CliCommand::DebugAction => {
             let stream = rpc::connect_uds_ipc(&config);
             let rpc = rpc::Rpc::DebugAction;
