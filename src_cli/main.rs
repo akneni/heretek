@@ -83,7 +83,7 @@ fn bringup(config: &Config) {
 }
 
 fn bringdown(config: &Config) {
-    match rpc::connect_uds_ipc(&config) {
+    match rpc::try_connect_uds_ipc(&config) {
         Ok(stream) => {
             let rpc = rpc::Rpc::Bringdown { unload_bpf: false };
             rpc.stream_send(&stream).unwrap();
@@ -100,7 +100,7 @@ fn bringdown(config: &Config) {
                 }
             };
         }
-        _ => println!("Heretek daemon not running"),
+        Err(_e) => println!("Heretek daemon not running"),
     };
 
     if let Err(e) = bpf::unload_bpf_objects(config) {
@@ -200,7 +200,8 @@ fn main() {
             daemon(&config);
         }
         CliCommand::SummaryPid { pid } => {
-            let stream = rpc::connect_uds_ipc(&config).unwrap();
+            let stream = rpc::connect_uds_ipc(&config);
+
             let rpc = rpc::Rpc::GetSummaryPid { pid };
             rpc.stream_send(&stream).unwrap();
             let rpc_res = RpcResult::stream_recv(&stream).unwrap();
@@ -215,7 +216,7 @@ fn main() {
         }
         CliCommand::SummaryExe { exe_path } => {
             let rpc = rpc::Rpc::GetSummaryExe { exe_path };
-            let stream = rpc::connect_uds_ipc(&config).unwrap();
+            let stream = rpc::connect_uds_ipc(&config);
             rpc.stream_send(&stream).unwrap();
             let rpc_res = RpcResult::stream_recv(&stream).unwrap();
             match rpc_res {
@@ -229,7 +230,7 @@ fn main() {
         }
         CliCommand::SetProfile { profile, pid } => {
             let rpc = Rpc::SetProfile { profile, pid };
-            let stream = rpc::connect_uds_ipc(&config).unwrap();
+            let stream = rpc::connect_uds_ipc(&config);
             rpc.stream_send(&stream).unwrap();
             let rpc_res = RpcResult::stream_recv(&stream).unwrap();
             match rpc_res {
@@ -245,7 +246,7 @@ fn main() {
             }
         }
         CliCommand::DebugAction => {
-            let stream = rpc::connect_uds_ipc(&config).unwrap();
+            let stream = rpc::connect_uds_ipc(&config);
             let rpc = rpc::Rpc::DebugAction;
             rpc.stream_send(&stream).unwrap();
             let rpc_res = RpcResult::stream_recv(&stream).unwrap();

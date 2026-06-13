@@ -44,8 +44,18 @@ pub fn create_uds_ipc(_config: &Config) -> UnixListener {
     UnixListener::bind(&uds_path).unwrap()
 }
 
-pub fn connect_uds_ipc(_config: &Config) -> Result<UnixStream> {
+pub fn try_connect_uds_ipc(_config: &Config) -> Result<UnixStream> {
     let uds_path = get_uds_path();
 
     Ok(UnixStream::connect(&uds_path)?)
+}
+
+pub fn connect_uds_ipc(config: &Config) -> UnixStream {
+    match try_connect_uds_ipc(config) {
+        Ok(r) => r,
+        Err(_e) => {
+            eprintln!("Heretek daemon is not running");
+            process::exit(1);
+        }
+    }
 }
