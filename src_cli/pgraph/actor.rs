@@ -142,6 +142,14 @@ impl Actor {
         fullpath = fs::canonicalize(&fullpath).unwrap_or(fullpath);
         Ok(fullpath)
     }
+
+    pub fn is_unchained(&self) -> bool {
+        match self.actor_md.profile.len() {
+            0 => return true,
+            1 => return self.actor_md.profile.contains("unchained"),
+            _ => return false,
+        }
+    }
 }
 
 /// This block of functoins are event handlers

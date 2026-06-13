@@ -1,10 +1,14 @@
 use std::{
     collections::{HashMap, HashSet, VecDeque},
     fmt::Write,
-    fs, io,
+    fs, io, process,
+    time::Instant,
 };
 
+use directories::ProjectDirs;
+
 use crate::{
+    build_params,
     pgraph::{Actor, ActorState, ActorTuid},
     uinterf::Config,
 };
@@ -265,6 +269,166 @@ impl PGraph {
 
         pgraph.update_bootstrap_unchained_chains();
         pgraph
+    }
+
+    /// Checks that all nodes with unchained_chain = true are really unchaned
+    /// and checks that the same is true for all it's parents.
+    /// This function does nothing and is compiled out in release builds
+    pub fn check_unchained_chains_dbgo(&self) {
+        if !build_params::ASSERTS {
+            return;
+        }
+
+        let timer = Instant::now();
+        let mut unchaineds: HashSet<ActorTuid> = HashSet::new();
+        let mut errors = vec![];
+
+        for (&tuid, node) in self.nodes.iter() {
+            if !node.unchained_chain {
+                continue;
+            }
+
+            if !node.actor.is_unchained() {
+                errors.push(format!(
+                    "unchained chain actor isn't unchained\nActor TUID: {:?}",
+                    tuid
+                ));
+            }
+
+            let mut curr_node = node;
+            let initial_len = errors.len();
+            let mut unchaineds_curr = HashSet::new();
+            unchaineds_curr.insert(tuid);
+            loop {
+                let curr_tuid = match curr_node.creator_tuid {
+                    Some(r) => r,
+                    None => break,
+                };
+
+                if unchaineds.contains(&curr_tuid) {
+                    break;
+                }
+                curr_node = match self.nodes.get(&curr_tuid) {
+                    Some(r) => r,
+                    None => {
+                        errors.push(format!(
+                            "Actor has a creator_tuid that doesn't exist\nParent TUID: {:?}\nChild TUID: {:?}",
+                            curr_tuid,
+                            tuid,
+                        ));
+                        continue;
+                    }
+                };
+
+                if !curr_node.actor.is_unchained() {
+                    errors.push(format!(
+                        "unchained chain actor has a chained parent\nParent TUID: {:?}\nChild TUID: {:?}",
+                        curr_node.actor.id,
+                        tuid,
+                    ));
+                }
+                unchaineds_curr.insert(curr_tuid);
+            }
+
+            if initial_len == errors.len() {
+                unchaineds.extend(unchaineds_curr.iter());
+            }
+        }
+
+        if !errors.is_empty() {
+            let mut payload = "ASSERTION FAILED [check_unchained_chains_dbgo]\n\n".to_string();
+            let errors_str = errors.join("\n\n");
+            payload.push_str(&errors_str);
+            payload.push_str("\n\n\nPgraph:\n\n");
+
+            for (_, node) in self.nodes.iter() {
+                writeln!(&mut payload, "{}\n", node.to_str(1)).unwrap();
+            }
+
+            let proj = ProjectDirs::from("com", "heretek", "heretek").unwrap();
+            let ts = chrono::Utc::now().format("%Y-%m-%dT%H-%M-%SZ").to_string();
+            let alert_path = proj
+                .data_dir()
+                .join(&format!("assertion_failure_{}.incident", ts));
+            println!("{}", alert_path.display());
+            fs::write(&alert_path, &payload).unwrap();
+            process::exit(1);
+        }
+
+        if build_params::PERF_TRACKING {
+            println!(
+                "Time Elapsed [check_unchained_chains_dbgo]: {:?}",
+                timer.elapsed()
+            );
+        }
+    }
+
+    pub fn check_cycles_dbgo(&self) {
+        if !build_params::ASSERTS {
+            return;
+        }
+
+        let timer = Instant::now();
+        let mut errors = vec![];
+
+        let mut nodes_seen = HashSet::new();
+        for (&tuid, node) in self.nodes.iter() {
+            nodes_seen.clear();
+            nodes_seen.insert(tuid);
+
+            let mut curr_node = node;
+            loop {
+                let curr_tuid = match curr_node.creator_tuid {
+                    Some(r) => r,
+                    None => break,
+                };
+
+                if nodes_seen.contains(&curr_tuid) {
+                    errors.push(format!(
+                        "Pgrah has cyclic references.\nTUID: {:?}",
+                        curr_tuid
+                    ));
+                } else {
+                    nodes_seen.insert(curr_tuid);
+                }
+
+                curr_node = match self.nodes.get(&curr_tuid) {
+                    Some(r) => r,
+                    None => {
+                        errors.push(format!(
+                            "Actor has a creator_tuid that doesn't exist\nParent TUID: {:?}\nChild TUID: {:?}",
+                            curr_tuid,
+                            tuid,
+                        ));
+                        continue;
+                    }
+                };
+            }
+        }
+
+        if !errors.is_empty() {
+            let mut payload = "ASSERTION FAILED [check_cycles_dbgo]\n\n".to_string();
+            let errors_str = errors.join("\n\n");
+            payload.push_str(&errors_str);
+            payload.push_str("\n\n\nPgraph:\n\n");
+
+            for (_, node) in self.nodes.iter() {
+                writeln!(&mut payload, "{}\n", node.to_str(1)).unwrap();
+            }
+
+            let proj = ProjectDirs::from("com", "heretek", "heretek").unwrap();
+            let ts = chrono::Utc::now().format("%Y-%m-%dT%H-%M-%SZ").to_string();
+            let alert_path = proj
+                .data_dir()
+                .join(&format!("assertion_failure_{}.incident", ts));
+            println!("{}", alert_path.display());
+            fs::write(&alert_path, &payload).unwrap();
+            process::exit(1);
+        }
+
+        if build_params::PERF_TRACKING {
+            println!("Time Elapsed [check_cycles_dbgo]: {:?}", timer.elapsed());
+        }
     }
 
     fn compute_bootstrap_unchained_chain(

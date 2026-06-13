@@ -84,6 +84,10 @@ fn handle_simple_event(config: &Config, pgraph: &mut PGraph, cevent: &CEvent) {
                 None => break,
             };
 
+            if node.unchained_chain {
+                break;
+            }
+
             let violation = node.actor.handle_event(config, &event, child_owned);
             if let PolicyVerdict::Violation { .. } = violation {
                 violations.push(violation);

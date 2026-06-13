@@ -1,7 +1,5 @@
 # Enter your custom build parameters here.
 # You can see a list and docs for all build parameters in ./build_utils/build-parameters-default.toml
 
-
-# Size of the per-core ring buffers used to stream events from eBPF to the daemon.
-# Note that is in terms of powers of 2. So 7 means that the ring buf size is (2^7) = 128
-RING_BUF_SIZE_LOG2=14
+ASSERTS=true
+PERF_TRACKING=false

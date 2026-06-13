@@ -1,12 +1,7 @@
 mod ipc;
 mod uds_utils;
 
-use std::{
-    fmt::Write,
-    os::unix::net::UnixListener,
-    path::{Path, PathBuf},
-    process,
-};
+use std::{fmt::Write, os::unix::net::UnixListener, path::PathBuf, process};
 
 use anyhow::{Context, Result, bail};
 pub use ipc::*;

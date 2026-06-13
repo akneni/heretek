@@ -162,9 +162,12 @@ fn daemon(config: &Config) {
         let te = timer.elapsed().as_micros() as u64;
         ttracker.end_iter();
 
-        // if ttracker.total_iterations % 10 == 0 {
-        //     ttracker.display_stats();
-        // }
+        if ttracker.total_iterations % 10 == 0 && build_params::PERF_TRACKING {
+            ttracker.display_stats();
+        }
+
+        pgraph_db.check_unchained_chains_dbgo();
+        pgraph_db.check_cycles_dbgo();
 
         let iter_interval_us = iter_interval.as_micros() as u64;
         if te >= iter_interval_us {
@@ -268,18 +271,22 @@ fn main() {
             }
         }
         CliCommand::DebugAction => {
-            let stream = rpc::connect_uds_ipc(&config);
-            let rpc = rpc::Rpc::DebugAction;
-            rpc.stream_send(&stream).unwrap();
-            let rpc_res = RpcResult::stream_recv(&stream).unwrap();
-            match rpc_res {
-                rpc::RpcResult::DebugActionRes(s) => {
-                    println!("{}", s);
-                }
-                _ => {
-                    unreachable!();
-                }
-            }
+            let proj = ProjectDirs::from("com", "heretek", "heretek").unwrap();
+            println!("Data:    {}", proj.data_dir().display());
+            println!("Config:  {}", proj.config_dir().display());
+
+            // let stream = rpc::connect_uds_ipc(&config);
+            // let rpc = rpc::Rpc::DebugAction;
+            // rpc.stream_send(&stream).unwrap();
+            // let rpc_res = RpcResult::stream_recv(&stream).unwrap();
+            // match rpc_res {
+            //     rpc::RpcResult::DebugActionRes(s) => {
+            //         println!("{}", s);
+            //     }
+            //     _ => {
+            //         unreachable!();
+            //     }
+            // }
         }
     }
 }

@@ -1,4 +1,4 @@
-use std::{ffi::OsString, path::PathBuf};
+use std::ffi::OsString;
 
 use clap::{Arg, ArgMatches, Command as ClapCommand};
 
@@ -33,8 +33,8 @@ pub fn command() -> ClapCommand {
         .subcommand_required(true)
         .arg_required_else_help(true)
         .subcommand(ClapCommand::new("daemon").about("Run the Heretek daemon"))
-        .subcommand(ClapCommand::new("bringup").about("Bring up the Heretek daemon"))
-        .subcommand(ClapCommand::new("bringdown").about("Bring down the Heretek daemon"))
+        .subcommand(ClapCommand::new("up").about("Bring up the Heretek daemon"))
+        .subcommand(ClapCommand::new("down").about("Bring down the Heretek daemon"))
         .subcommand(
             ClapCommand::new("debug-action")
                 .about("Run a debug action")
@@ -83,8 +83,8 @@ impl CliCommand {
     fn from_matches(matches: &ArgMatches) -> Self {
         match matches.subcommand() {
             Some(("daemon", _)) => Self::Daemon,
-            Some(("bringup", _)) => Self::Bringup,
-            Some(("bringdown", _)) => Self::Bringdown,
+            Some(("up", _)) => Self::Bringup,
+            Some(("down", _)) => Self::Bringdown,
             Some(("debug-action", _)) => Self::DebugAction,
             Some(("summary", sub_matches)) => {
                 let target = sub_matches

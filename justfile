@@ -19,16 +19,28 @@ pull:
     sudo chown aknen ACL.json
 
 install:
-    sudo ./target/debug/htek bringdown
+    sudo ./target/debug/htek down
     cargo build
     sudo cp ./target/debug/htek /usr/bin/htek
 
 reinstall:
-    sudo ./target/debug/htek bringdown
+    sudo ./target/debug/htek down
     cargo build
     sudo cp ./target/debug/htek /usr/bin/htek
-    sudo htek bringup
+    sudo htek up
 
 restart:
-    sudo htek bringdown
-    sudo htek bringup
+    sudo htek down
+    sudo htek up
+
+start_sync:
+    sudo htek down
+    cargo build
+    pixi run load
+    sudo ./target/debug/htek daemon
+
+start_syncr:
+    sudo htek down
+    cargo build --release
+    pixi run load
+    sudo ./target/release/htek daemon

@@ -1,5 +1,7 @@
 use std::time::{Duration, Instant};
 
+use crate::build_params;
+
 /// This file and the code in it is likely temporary and only here for performance testing
 
 #[derive(Debug)]
@@ -25,23 +27,34 @@ impl PerfTracker {
     }
 
     pub fn start_iter(&mut self) {
+        if !build_params::PERF_TRACKING {
+            return;
+        }
         self.timer = Instant::now();
     }
 
     pub fn record_num_events(&mut self, num_events: u64) {
+        if !build_params::PERF_TRACKING {
+            return;
+        }
         self.total_events += num_events;
         self.max_events = self.max_events.max(num_events);
     }
 
     pub fn end_iter(&mut self) {
+        if !build_params::PERF_TRACKING {
+            return;
+        }
         let te = self.timer.elapsed().as_micros() as u64;
         self.total_iterations += 1;
         self.total_time_elapsed += te;
         self.max_time_elapsed = self.max_time_elapsed.max(te);
     }
 
-    #[allow(unused)]
     pub fn display_stats(&self) {
+        if !build_params::PERF_TRACKING {
+            return;
+        }
         println!(
             "(Avg Time {:?}) (Max Time = {:?}) (Avg Events {}) (Max Events {})",
             Duration::from_micros(self.total_time_elapsed / self.total_iterations),

@@ -207,4 +207,17 @@ impl Event {
             args,
         })
     }
+
+    // If this event has something to do with a file, this will return that file's path
+    // Else, returns none
+    #[allow(unused)]
+    pub fn file_touched(&self) -> Option<PathBuf> {
+        match &self.args {
+            EventArgs::Execve { binary } => Some(binary.clone()),
+            EventArgs::Openat { fpath, .. } => Some(fpath.clone()),
+            EventArgs::Mmap { fpath, .. } => fpath.clone(),
+            EventArgs::ConnectUds { fpath, .. } => Some(fpath.clone()),
+            _ => None,
+        }
+    }
 }

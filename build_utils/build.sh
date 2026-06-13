@@ -2,10 +2,7 @@
 
 set -euo pipefail
 
-mkdir -p build
-export CARGO_TARGET_DIR=build
-
-cargo build 
+cargo build
 
 clang \
   -O2 \
