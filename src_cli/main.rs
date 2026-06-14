@@ -99,7 +99,7 @@ fn bringup(config: &Config) {
 }
 
 fn bringdown(config: &Config) -> Result<()> {
-    match rpc::try_connect_uds_ipc(&config) {
+    match rpc::try_connect_uds_ipc(config) {
         Ok(stream) => {
             let rpc = rpc::Rpc::Bringdown { unload_bpf: false };
             rpc.try_stream_send(&stream)?;
@@ -156,7 +156,7 @@ fn daemon(config: &Config) {
     };
 
     let mut events = vec![];
-    let mut pgraph_db = PGraph::from_existing_processes(&config);
+    let mut pgraph_db = PGraph::from_existing_processes(config);
 
     let iter_interval = Duration::from_micros(50_000);
     let mut ttracker = perftracker::PerfTracker::new();
@@ -188,7 +188,7 @@ fn daemon(config: &Config) {
         events = vec![];
 
         // 3) Check for IPC RPCs from CLI invocations of this tool (like `htek desc <pid>`)
-        if let Err(e) = rpc::handle_rpc(&config, &mut pgraph_db, &socket) {
+        if let Err(e) = rpc::handle_rpc(config, &mut pgraph_db, &socket) {
             eprintln!("Error processing RPC: {e}");
         }
 
@@ -196,12 +196,12 @@ fn daemon(config: &Config) {
         let te = timer.elapsed().as_micros() as u64;
         ttracker.end_iter();
 
-        if ttracker.total_iterations % 10 == 0 && build_params::PERF_TRACKING {
+        if ttracker.total_iterations.is_multiple_of(10) && build_params::PERF_TRACKING {
             ttracker.display_stats();
         }
 
-        pgraph_db.check_unchained_chains_dbgo(&config);
-        pgraph_db.check_cycles_dbgo(&config);
+        pgraph_db.check_unchained_chains_dbgo(config);
+        pgraph_db.check_cycles_dbgo(config);
 
         let iter_interval_us = iter_interval.as_micros() as u64;
         if te >= iter_interval_us {

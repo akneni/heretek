@@ -64,7 +64,7 @@ pub fn handle_response(config: &Config, pgraph_db: &PGraph, violations: &[Policy
         } else {
             return;
         };
-        let node = match pgraph_db.nodes.get(&evil_root) {
+        let node = match pgraph_db.nodes.get(evil_root) {
             Some(r) => r,
             None => {
                 if !build_params::ASSERTS {
@@ -76,15 +76,15 @@ pub fn handle_response(config: &Config, pgraph_db: &PGraph, violations: &[Policy
                 {
                     let _ = inc_file.dmp_stacktrace();
                     let _ = inc_file.dmp_debugable("Violating TUOD", &violating_tuids);
-                    let _ = inc_file.dmp_pgraph(&pgraph_db);
+                    let _ = inc_file.dmp_pgraph(pgraph_db);
                 }
 
                 continue;
             }
         };
 
-        if config.quarentine.contains(&"log".to_string()) {
-            if let Err(e) = log(
+        if config.quarentine.contains(&"log".to_string())
+            && let Err(e) = log(
                 config,
                 node,
                 violation,
@@ -94,7 +94,6 @@ pub fn handle_response(config: &Config, pgraph_db: &PGraph, violations: &[Policy
             ) {
                 eprintln!("failed to write to alert log: {e}");
             }
-        }
         if config.quarentine.contains(&"notify".to_string()) {
             notify(node);
         }
@@ -297,7 +296,7 @@ fn notify(node: &PGraphNode) {
 
     let res = Notification::new()
         .summary(&format!("heretek alert! {} flagged", bin))
-        .body(&format!("{}", node.to_str(1)))
+        .body(&node.to_str(1).to_string())
         .show();
 
     if let Err(e) = res {

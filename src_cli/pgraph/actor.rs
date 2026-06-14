@@ -146,9 +146,9 @@ impl Actor {
 
     pub fn is_unchained(&self) -> bool {
         match self.actor_md.profile.len() {
-            0 => return true,
-            1 => return self.actor_md.profile.contains("unchained"),
-            _ => return false,
+            0 => true,
+            1 => self.actor_md.profile.contains("unchained"),
+            _ => false,
         }
     }
 }
@@ -193,7 +193,7 @@ impl Actor {
                 creator_pid,
             } => {
                 incident!("Not supported", config);
-                return PolicyVerdict::Benign;
+                PolicyVerdict::Benign
             }
         }
     }
@@ -211,7 +211,7 @@ impl Actor {
         let entry = self.summary.events.entry(protectee);
         let v = *entry.and_modify(|x| x.union(mode)).or_insert(mode);
 
-        config.acl.check_violation(&self, fpath, v)
+        config.acl.check_violation(self, fpath, v)
     }
 
     pub fn handle_connect_uds(&mut self, config: &Config, fpath: &Path) -> PolicyVerdict {
@@ -223,7 +223,7 @@ impl Actor {
         let entry = self.summary.events.entry(protectee);
         let v = *entry.and_modify(|x| x.union(mode)).or_insert(mode);
 
-        config.acl.check_violation(&self, fpath, v)
+        config.acl.check_violation(self, fpath, v)
     }
 
     pub fn handle_rename(&mut self, config: &Config, src: &Path, dest: &Path) -> PolicyVerdict {
@@ -246,7 +246,7 @@ impl Actor {
     /// Handle execve metadata update
     pub fn handle_execve_mdupdate(&mut self, config: &Config, binary: &Path) -> PolicyVerdict {
         // TODO: Determine the correct way to get the binary path
-        let binary_path = match fs::canonicalize(&binary) {
+        let binary_path = match fs::canonicalize(binary) {
             Ok(r) => r,
             _ => {
                 let bin_path = format!("/proc/{}/exe", self.id.pid);

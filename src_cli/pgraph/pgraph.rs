@@ -348,7 +348,7 @@ impl PGraph {
 
             let _ = inc_file.dmp_stacktrace();
             let _ = inc_file.dmp_debugable("Errors", &errors);
-            let _ = inc_file.dmp_pgraph(&self);
+            let _ = inc_file.dmp_pgraph(self);
             process::exit(1);
         }
 
@@ -415,7 +415,7 @@ impl PGraph {
 
             let _ = inc_file.dmp_stacktrace();
             let _ = inc_file.dmp_debugable("Errors", &errors);
-            let _ = inc_file.dmp_pgraph(&self);
+            let _ = inc_file.dmp_pgraph(self);
             process::exit(1);
         }
 

@@ -17,7 +17,7 @@ impl IncFile {
     pub fn new(config: &Config, desc: &str) -> Result<Self> {
         let timer = Instant::now();
         let ts = chrono::Utc::now().format("%Y-%m-%dT%H-%M-%SZ").to_string();
-        let inc_path = config.dirs.data_dir().join(&format!("{}.incident", ts));
+        let inc_path = config.dirs.data_dir().join(format!("{}.incident", ts));
 
         let fp = File::options().create(true).write(true).open(&inc_path)?;
         let mut inc_file = Self { fp, timer };
