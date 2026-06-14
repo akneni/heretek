@@ -5,21 +5,25 @@ use std::{
     process,
 };
 
-use anyhow::Result;
-use directories::ProjectDirs;
+use anyhow::{Result, bail};
 
 use crate::uinterf::Config;
 
-pub fn get_uds_path() -> PathBuf {
-    let proj = ProjectDirs::from("com", "heretek", "heretek").unwrap();
-    let proj_data = proj.data_dir();
-    fs::create_dir_all(proj_data).unwrap();
+pub fn get_uds_path(config: &Config) -> Result<PathBuf> {
+    let proj_data = config.dirs.data_dir();
+    fs::create_dir_all(proj_data)?;
 
-    proj_data.join("RPC.sock")
+    Ok(proj_data.join("RPC.sock"))
 }
 
-pub fn check_uds_ipc_inuse(_config: &Config) {
-    let uds_path = get_uds_path();
+pub fn check_uds_ipc_inuse(config: &Config) {
+    let uds_path = match get_uds_path(config) {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("Failed to get uds path: {e}");
+            process::exit(1);
+        }
+    };
     if uds_path.exists() {
         let stream = UnixStream::connect(&uds_path);
         if let Ok(_) = stream {
@@ -29,23 +33,22 @@ pub fn check_uds_ipc_inuse(_config: &Config) {
     }
 }
 
-pub fn create_uds_ipc(_config: &Config) -> UnixListener {
-    let uds_path = get_uds_path();
+pub fn try_create_uds_ipc(config: &Config) -> Result<UnixListener> {
+    let uds_path = get_uds_path(config)?;
     if uds_path.exists() {
         let stream = UnixStream::connect(&uds_path);
         if let Ok(_) = stream {
-            eprintln!("Socket already in use. It seems like an htek daemon is already running");
-            process::exit(1);
+            bail!("Socket already in use. It seems like an htek daemon is already running");
         }
 
-        fs::remove_file(&uds_path).unwrap();
+        fs::remove_file(&uds_path)?;
     }
 
-    UnixListener::bind(&uds_path).unwrap()
+    Ok(UnixListener::bind(&uds_path)?)
 }
 
-pub fn try_connect_uds_ipc(_config: &Config) -> Result<UnixStream> {
-    let uds_path = get_uds_path();
+pub fn try_connect_uds_ipc(config: &Config) -> Result<UnixStream> {
+    let uds_path = get_uds_path(config)?;
 
     Ok(UnixStream::connect(&uds_path)?)
 }

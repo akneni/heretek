@@ -130,18 +130,17 @@ impl AccessType {
         other.is_superset_of(*self)
     }
 
-    pub fn from_str(mode: &str) -> Result<Self> {
+    pub fn from_rwxbc_str(mode: &str) -> Result<Self> {
         let bytes = mode.as_bytes();
         if bytes.len() != 3 && bytes.len() != 5 {
             bail!("access mode must be exactly 3 or 5 characters");
         }
 
-        let valid = |on: u8, off: u8, expected: u8| on == expected || on == off;
-        if !valid(bytes[0], b'-', b'r')
-            || !valid(bytes[1], b'-', b'w')
-            || !valid(bytes[2], b'-', b'x')
-            || (bytes.len() == 5 && !valid(bytes[3], b'-', b'b'))
-            || (bytes.len() == 5 && !valid(bytes[4], b'-', b'c'))
+        if !(bytes[0] == b'-' || bytes[0] == b'r')
+            || !(bytes[1] == b'-' || bytes[1] == b'w')
+            || !(bytes[2] == b'-' || bytes[2] == b'x')
+            || (bytes.len() == 5 && !(bytes[3] == b'-' || bytes[3] == b'b'))
+            || (bytes.len() == 5 && !(bytes[4] == b'-' || bytes[4] == b'c'))
         {
             bail!("invalid access mode");
         }
@@ -153,6 +152,31 @@ impl AccessType {
             bind: bytes.len() == 5 && bytes[3] == b'b',
             connect: bytes.len() == 5 && bytes[4] == b'c',
         })
+    }
+
+    /// This function MUST only be called at compile time
+    pub const fn from_rwxbc_str_const(mode: &str) -> Self {
+        let bytes = mode.as_bytes();
+        if bytes.len() != 3 && bytes.len() != 5 {
+            panic!("access mode must be exactly 3 or 5 characters");
+        }
+
+        if !(bytes[0] == b'-' || bytes[0] == b'r')
+            || !(bytes[1] == b'-' || bytes[1] == b'w')
+            || !(bytes[2] == b'-' || bytes[2] == b'x')
+            || (bytes.len() == 5 && !(bytes[3] == b'-' || bytes[3] == b'b'))
+            || (bytes.len() == 5 && !(bytes[4] == b'-' || bytes[4] == b'c'))
+        {
+            panic!("invalid access mode");
+        }
+
+        Self {
+            read: bytes[0] == b'r',
+            write: bytes[1] == b'w',
+            execute: bytes[2] == b'x',
+            bind: bytes.len() == 5 && bytes[3] == b'b',
+            connect: bytes.len() == 5 && bytes[4] == b'c',
+        }
     }
 
     pub fn to_rwxbc_str(self, out_str: &mut String) {

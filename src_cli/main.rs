@@ -1,5 +1,6 @@
 use std::{
-    env, fs,
+    fs,
+    os::unix::net::UnixListener,
     process::{self, Stdio},
     thread,
     time::{Duration, Instant},
@@ -8,8 +9,11 @@ use std::{
 use anyhow::{Context, Result, bail};
 use directories::ProjectDirs;
 
-use crate::rpc::{RpcResult, StreamSendable};
 use crate::uinterf::CliCommand;
+use crate::{
+    bpf::BpfEventArrayReader,
+    rpc::{RpcResult, StreamSendable},
+};
 use crate::{
     detection::Acl,
     uinterf::{Config, ConfigFile},
@@ -37,7 +41,12 @@ fn preflight() -> Result<Config> {
         _ => bail!("Unsupported platform! Currently supported platforms: Linux"),
     }
 
-    let proj = ProjectDirs::from("com", "heretek", "heretek").unwrap();
+    let proj = match ProjectDirs::from("com", "heretek", "heretek") {
+        Some(r) => r,
+        None => {
+            bail!("No valid home directory could be found");
+        }
+    };
     fs::create_dir_all(proj.config_dir())?;
 
     let config_path = proj.config_dir().join("config.json");
@@ -48,15 +57,13 @@ fn preflight() -> Result<Config> {
     }
 
     let acl_path = proj.config_dir().join("ACL.json");
-    let acl = Acl::from_acl_file(&acl_path)
-        .context("Failed to parse ACL")
-        .unwrap();
+    let acl = Acl::from_acl_file(&acl_path).context("Failed to parse ACL")?;
 
     let c_str = fs::read_to_string(&config_path)?;
     let config_file: ConfigFile =
         serde_json::from_str(&c_str).context("Failed to parse ConfigFile")?;
 
-    let cfg = Config::from(config_file, acl);
+    let cfg = Config::from(config_file, acl)?;
     Ok(cfg)
 }
 
@@ -68,7 +75,16 @@ fn bringup(config: &Config) {
         process::exit(1);
     }
 
-    let bin = env::args().next().unwrap();
+    let bin = match fs::canonicalize("/proc/self/exe") {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!(
+                "Failed to find htek binary (could not read /proc/self/exe):\n{}",
+                e
+            );
+            process::exit(1);
+        }
+    };
     let cmd = process::Command::new(&bin)
         .arg("daemon")
         .stdin(Stdio::null())
@@ -82,12 +98,12 @@ fn bringup(config: &Config) {
     }
 }
 
-fn bringdown(config: &Config) {
+fn bringdown(config: &Config) -> Result<()> {
     match rpc::try_connect_uds_ipc(&config) {
         Ok(stream) => {
             let rpc = rpc::Rpc::Bringdown { unload_bpf: false };
-            rpc.stream_send(&stream).unwrap();
-            match RpcResult::stream_recv(&stream) {
+            rpc.try_stream_send(&stream)?;
+            match RpcResult::try_stream_recv(&stream) {
                 Ok(r) => match r {
                     rpc::RpcResult::BringdownRes(s) => {
                         println!("{}", s);
@@ -103,30 +119,39 @@ fn bringdown(config: &Config) {
         Err(_e) => println!("Heretek daemon not running"),
     };
 
-    if let Err(e) = bpf::unload_bpf_objects(config) {
-        eprintln!("Failed to unload eBPF objects: {}", e);
-        process::exit(1);
-    }
+    bpf::unload_bpf_objects(config)?;
+    Ok(())
 }
 
-fn daemon(config: &Config) {
-    //Daemon Specific Preflight Actions
-    response::init_alert_log(config);
+fn daemon_init(config: &Config) -> Result<(UnixListener, BpfEventArrayReader)> {
+    response::init_alert_log(config).context("Failed to initalize the alert/violation log")?;
 
-    let socket = rpc::create_uds_ipc(config);
-    socket.set_nonblocking(true).unwrap();
+    let socket = rpc::try_create_uds_ipc(config)?;
+    socket.set_nonblocking(true)?;
 
-    let reader = bpf::BpfEventArrayReader::from_pinned_path("/sys/fs/bpf/heretek-maps/events");
-    let mut reader = match reader {
+    let bpf_reader = bpf::BpfEventArrayReader::from_pinned_path("/sys/fs/bpf/heretek-maps/events");
+    let bpf_reader = match bpf_reader {
         Ok(r) => r,
         Err(e) => {
             let err_str = format!("{:?}", e);
             if err_str.contains("code: 2") && err_str.contains("No such file or directory") {
-                eprintln!("The BPF map is not loaded");
+                bail!("The BPF map is not loaded");
             } else {
-                eprintln!("Unknown error accessing the bpf map: {:?}", e);
+                bail!("Unknown error accessing the bpf map: {:?}", e);
             }
-            std::process::exit(1);
+        }
+    };
+
+    Ok((socket, bpf_reader))
+}
+
+fn daemon(config: &Config) {
+    // This is the only area in the code where the daemon is allowed to exit/fail (unless ASSERTS is enabled)
+    let (socket, mut bpf_reader) = match daemon_init(config) {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("An error occured while initalizing the daemon: {e}");
+            process::exit(1);
         }
     };
 
@@ -141,7 +166,16 @@ fn daemon(config: &Config) {
         ttracker.start_iter();
 
         // 1) Drain the ring buffers and update it's internal pgraph structure with the events just pulled
-        reader.poll(&mut events).unwrap();
+        if let Err(e) = bpf_reader.poll(&mut events) {
+            let sleep_int = Duration::from_millis(500);
+            ttracker.end_iter();
+
+            eprintln!("An error occured while polling the eBPF mnaps. Make sure they are loaded:");
+            eprintln!("{e}");
+            eprintln!("Sleeping for {:?} and retrying", sleep_int);
+            thread::sleep(sleep_int);
+            continue;
+        }
         events.sort_by_key(|x| x.ktime);
         ttracker.record_num_events(events.len() as u64);
 
@@ -166,8 +200,8 @@ fn daemon(config: &Config) {
             ttracker.display_stats();
         }
 
-        pgraph_db.check_unchained_chains_dbgo();
-        pgraph_db.check_cycles_dbgo();
+        pgraph_db.check_unchained_chains_dbgo(&config);
+        pgraph_db.check_cycles_dbgo(&config);
 
         let iter_interval_us = iter_interval.as_micros() as u64;
         if te >= iter_interval_us {
@@ -197,7 +231,10 @@ fn main() {
             bringup(&config);
         }
         CliCommand::Bringdown => {
-            bringdown(&config);
+            if let Err(e) = bringdown(&config) {
+                eprintln!("An error occured:\n{}", e);
+                process::exit(1);
+            }
         }
         CliCommand::Daemon => {
             daemon(&config);
@@ -206,8 +243,8 @@ fn main() {
             let stream = rpc::connect_uds_ipc(&config);
 
             let rpc = rpc::Rpc::GetSummaryPid { pid };
-            rpc.stream_send(&stream).unwrap();
-            let rpc_res = RpcResult::stream_recv(&stream).unwrap();
+            rpc.stream_send(&stream);
+            let rpc_res = RpcResult::stream_recv(&stream);
             match rpc_res {
                 rpc::RpcResult::GetSummary(s) => {
                     println!("{}", s);
@@ -220,8 +257,8 @@ fn main() {
         CliCommand::SummaryExe { exe_path } => {
             let rpc = rpc::Rpc::GetSummaryExe { exe_path };
             let stream = rpc::connect_uds_ipc(&config);
-            rpc.stream_send(&stream).unwrap();
-            let rpc_res = RpcResult::stream_recv(&stream).unwrap();
+            rpc.stream_send(&stream);
+            let rpc_res = RpcResult::stream_recv(&stream);
             match rpc_res {
                 rpc::RpcResult::GetSummary(s) => {
                     println!("{}", s);
@@ -234,8 +271,8 @@ fn main() {
         CliCommand::SetProfile { profile, pid } => {
             let rpc = Rpc::SetProfile { profile, pid };
             let stream = rpc::connect_uds_ipc(&config);
-            rpc.stream_send(&stream).unwrap();
-            let rpc_res = RpcResult::stream_recv(&stream).unwrap();
+            rpc.stream_send(&stream);
+            let rpc_res = RpcResult::stream_recv(&stream);
             match rpc_res {
                 rpc::RpcResult::SetProfileRes { msg, success } => {
                     println!("{}", msg);
@@ -259,8 +296,8 @@ fn main() {
 
             let stream = rpc::connect_uds_ipc(&config);
             let rpc = Rpc::Touched { file: fpath };
-            rpc.stream_send(&stream).unwrap();
-            let rpc_res = RpcResult::stream_recv(&stream).unwrap();
+            rpc.stream_send(&stream);
+            let rpc_res = RpcResult::stream_recv(&stream);
             match rpc_res {
                 rpc::RpcResult::TouchedRes(s) => {
                     println!("{}", s);
@@ -271,14 +308,13 @@ fn main() {
             }
         }
         CliCommand::DebugAction => {
-            let proj = ProjectDirs::from("com", "heretek", "heretek").unwrap();
-            println!("Data:    {}", proj.data_dir().display());
-            println!("Config:  {}", proj.config_dir().display());
+            println!("Data:    {}", config.dirs.data_dir().display());
+            println!("Config:  {}", config.dirs.config_dir().display());
 
             // let stream = rpc::connect_uds_ipc(&config);
             // let rpc = rpc::Rpc::DebugAction;
-            // rpc.stream_send(&stream).unwrap();
-            // let rpc_res = RpcResult::stream_recv(&stream).unwrap();
+            // rpc.stream_send(&stream);
+            // let rpc_res = RpcResult::stream_recv(&stream);
             // match rpc_res {
             //     rpc::RpcResult::DebugActionRes(s) => {
             //         println!("{}", s);

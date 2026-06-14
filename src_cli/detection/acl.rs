@@ -30,7 +30,7 @@ impl ProfAccessRules {
     }
 
     fn insert_rule(&mut self, protectee: &str, mode: &str) -> Result<()> {
-        let access_type = AccessType::from_str(mode)?;
+        let access_type = AccessType::from_rwxbc_str(mode)?;
 
         if let Some(syscall) = protectee.strip_prefix("syscall:") {
             self.prote_syscalls.insert(syscall.to_string(), access_type);
@@ -57,7 +57,7 @@ impl ProfAccessRules {
             }
         }
 
-        AccessType::from_str("rwxbc").unwrap()
+        const { AccessType::from_rwxbc_str_const("rwxbc") }
     }
 
     #[allow(unused)]
@@ -65,7 +65,7 @@ impl ProfAccessRules {
         self.prote_syscalls
             .get(syscall)
             .copied()
-            .unwrap_or(AccessType::from_str("--x--").unwrap())
+            .unwrap_or(const { AccessType::from_rwxbc_str_const("--x--") })
     }
 }
 

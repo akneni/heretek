@@ -1,16 +1,14 @@
 use std::{
     collections::{HashMap, HashSet, VecDeque},
-    fmt::Write,
+    fmt::Write as FmtWrite,
     fs, io, process,
     time::Instant,
 };
 
-use directories::ProjectDirs;
-
 use crate::{
     build_params,
     pgraph::{Actor, ActorState, ActorTuid},
-    uinterf::Config,
+    uinterf::{Config, IncFile},
 };
 
 /// This type represents the bare minimum metadata of each actor/process.
@@ -65,7 +63,7 @@ impl PGraphNode {
 
         match actor.actor_md.binary.last() {
             Some(r) => {
-                let r_str = r.to_str().unwrap();
+                let r_str = r.to_str().unwrap_or("[binary unkown] ");
                 s.push_str(r_str);
                 s.push(' ');
             }
@@ -97,7 +95,7 @@ impl PGraphNode {
             s.push('\t');
             v.to_rwxbc_str(&mut s);
             s.push_str(" | ");
-            writeln!(&mut s, "{:?}", k).unwrap();
+            let _ = writeln!(&mut s, "{:?}", k);
         }
 
         if detail < 3 {
@@ -106,7 +104,7 @@ impl PGraphNode {
 
         s.push_str("Binaries Spawned:\n");
         for (idx, child_tuid) in self.child_tuids.iter().enumerate() {
-            writeln!(&mut s, "\t{} | PID = {}", idx, child_tuid.pid).unwrap();
+            let _ = writeln!(&mut s, "\t{} | PID = {}", idx, child_tuid.pid);
         }
 
         s
@@ -143,7 +141,7 @@ impl PGraph {
 
         let tuid = ActorTuid {
             pid,
-            start_ktime: real_ktime.unwrap(),
+            start_ktime: real_ktime?,
         };
         self.nodes.get_mut(&tuid)
     }
@@ -155,7 +153,10 @@ impl PGraph {
         let creator = match self.nodes.get_mut(&creator_tuid) {
             Some(r) => r,
             None => {
-                panic!("insert_actor called with a creator_tuid that doesn't exist");
+                if build_params::ASSERTS {
+                    panic!("insert_actor called with a creator_tuid that doesn't exist");
+                }
+                return;
             }
         };
 
@@ -274,7 +275,7 @@ impl PGraph {
     /// Checks that all nodes with unchained_chain = true are really unchaned
     /// and checks that the same is true for all it's parents.
     /// This function does nothing and is compiled out in release builds
-    pub fn check_unchained_chains_dbgo(&self) {
+    pub fn check_unchained_chains_dbgo(&self, config: &Config) {
         if !build_params::ASSERTS {
             return;
         }
@@ -336,22 +337,18 @@ impl PGraph {
         }
 
         if !errors.is_empty() {
-            let mut payload = "ASSERTION FAILED [check_unchained_chains_dbgo]\n\n".to_string();
-            let errors_str = errors.join("\n\n");
-            payload.push_str(&errors_str);
-            payload.push_str("\n\n\nPgraph:\n\n");
+            let mut inc_file =
+                match IncFile::new(config, "ASSERTION FAILED [check_unchained_chains_dbgo]") {
+                    Ok(r) => r,
+                    Err(e) => {
+                        eprintln!("Failed to create incident file: {e}");
+                        process::exit(1);
+                    }
+                };
 
-            for (_, node) in self.nodes.iter() {
-                writeln!(&mut payload, "{}\n", node.to_str(1)).unwrap();
-            }
-
-            let proj = ProjectDirs::from("com", "heretek", "heretek").unwrap();
-            let ts = chrono::Utc::now().format("%Y-%m-%dT%H-%M-%SZ").to_string();
-            let alert_path = proj
-                .data_dir()
-                .join(&format!("assertion_failure_{}.incident", ts));
-            println!("{}", alert_path.display());
-            fs::write(&alert_path, &payload).unwrap();
+            let _ = inc_file.dmp_stacktrace();
+            let _ = inc_file.dmp_debugable("Errors", &errors);
+            let _ = inc_file.dmp_pgraph(&self);
             process::exit(1);
         }
 
@@ -363,7 +360,7 @@ impl PGraph {
         }
     }
 
-    pub fn check_cycles_dbgo(&self) {
+    pub fn check_cycles_dbgo(&self, config: &Config) {
         if !build_params::ASSERTS {
             return;
         }
@@ -407,22 +404,18 @@ impl PGraph {
         }
 
         if !errors.is_empty() {
-            let mut payload = "ASSERTION FAILED [check_cycles_dbgo]\n\n".to_string();
-            let errors_str = errors.join("\n\n");
-            payload.push_str(&errors_str);
-            payload.push_str("\n\n\nPgraph:\n\n");
+            let mut inc_file =
+                match IncFile::new(config, "ASSERTION FAILED [check_unchained_chains_dbgo]") {
+                    Ok(r) => r,
+                    Err(e) => {
+                        eprintln!("Failed to create incident file: {e}");
+                        process::exit(1);
+                    }
+                };
 
-            for (_, node) in self.nodes.iter() {
-                writeln!(&mut payload, "{}\n", node.to_str(1)).unwrap();
-            }
-
-            let proj = ProjectDirs::from("com", "heretek", "heretek").unwrap();
-            let ts = chrono::Utc::now().format("%Y-%m-%dT%H-%M-%SZ").to_string();
-            let alert_path = proj
-                .data_dir()
-                .join(&format!("assertion_failure_{}.incident", ts));
-            println!("{}", alert_path.display());
-            fs::write(&alert_path, &payload).unwrap();
+            let _ = inc_file.dmp_stacktrace();
+            let _ = inc_file.dmp_debugable("Errors", &errors);
+            let _ = inc_file.dmp_pgraph(&self);
             process::exit(1);
         }
 

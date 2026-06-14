@@ -8,6 +8,7 @@ pub use ipc::*;
 pub use uds_utils::*;
 
 use crate::{
+    build_params,
     detection::Protectee,
     pgraph::{ActorState, PGraph},
     uinterf::Config,
@@ -23,7 +24,7 @@ pub fn handle_rpc(config: &Config, pgraph_db: &mut PGraph, socket: &UnixListener
         }
     };
 
-    let rpc = Rpc::stream_recv(&mut stream)?;
+    let rpc = Rpc::try_stream_recv(&mut stream)?;
 
     match rpc {
         Rpc::GetSummaryExe { exe_path } => {
@@ -35,7 +36,7 @@ pub fn handle_rpc(config: &Config, pgraph_db: &mut PGraph, socket: &UnixListener
                     if let ActorState::Exited = actor.actor_md.state {
                         continue;
                     }
-                    let bin_str = bin.to_str().unwrap();
+                    let bin_str = bin.to_str().unwrap_or("[unknown binary] ");
                     if !bin_str.ends_with(&exe_path) {
                         continue;
                     }
@@ -48,7 +49,7 @@ pub fn handle_rpc(config: &Config, pgraph_db: &mut PGraph, socket: &UnixListener
                 payload.push_str("No actors found");
             }
             let res = RpcResult::GetSummary(payload);
-            res.stream_send(&mut stream)?;
+            res.try_stream_send(&mut stream)?;
         }
         Rpc::GetSummaryPid { pid } => {
             let res_json = match pgraph_db.get_latest_mut(pid) {
@@ -59,7 +60,7 @@ pub fn handle_rpc(config: &Config, pgraph_db: &mut PGraph, socket: &UnixListener
             };
 
             let res = RpcResult::GetSummary(res_json);
-            res.stream_send(&mut stream)?;
+            res.try_stream_send(&mut stream)?;
         }
         Rpc::SetProfile { profile, pid } => {
             let res = match handle_set_profile(config, pgraph_db, &profile, pid) {
@@ -72,7 +73,7 @@ pub fn handle_rpc(config: &Config, pgraph_db: &mut PGraph, socket: &UnixListener
                     success: false,
                 },
             };
-            res.stream_send(&mut stream)?;
+            res.try_stream_send(&mut stream)?;
         }
         Rpc::Bringdown { unload_bpf } => {
             if unload_bpf {
@@ -82,14 +83,14 @@ pub fn handle_rpc(config: &Config, pgraph_db: &mut PGraph, socket: &UnixListener
         }
         Rpc::Touched { file } => {
             let res = handle_touched(pgraph_db, file);
-            res.stream_send(&stream)?;
+            res.try_stream_send(&stream)?;
         }
         Rpc::DebugAction => {
-            if !cfg!(debug_assertions) {
+            if !(cfg!(debug_assertions) || build_params::ASSERTS) {
                 let res = RpcResult::DebugActionRes(
-                    "debug action not supported in release mode".to_string(),
+                    "debug action not supported in release/prod mode".to_string(),
                 );
-                res.stream_send(stream)?;
+                res.try_stream_send(stream)?;
                 return Ok(());
             }
             let mut payload = String::new();
@@ -99,7 +100,7 @@ pub fn handle_rpc(config: &Config, pgraph_db: &mut PGraph, socket: &UnixListener
                 payload.push_str("");
             }
             let res = RpcResult::DebugActionRes(payload);
-            res.stream_send(stream)?;
+            res.try_stream_send(stream)?;
         }
     }
     Ok(())
@@ -138,7 +139,7 @@ fn handle_touched(pgraph_db: &mut PGraph, fpath: PathBuf) -> RpcResult {
 
         let p = Protectee::File(fpath.clone());
         if let Some(atype) = node.actor.summary.events.get(&p) {
-            write!(&mut payload, "{}Access Type: ", node.to_str(1)).unwrap();
+            let _ = write!(&mut payload, "{}Access Type: ", node.to_str(1));
             atype.to_rwxbc_str(&mut payload);
             payload.push_str("\n\n");
         }

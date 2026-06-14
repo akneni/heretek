@@ -2,12 +2,15 @@ mod actor;
 mod event;
 mod pgraph;
 
+use std::process;
+
 pub use actor::*;
 use anyhow::Result;
 pub use event::*;
 pub use pgraph::*;
 
 use crate::bpf::{CEvent, event_types};
+use crate::build_params;
 use crate::detection::PolicyVerdict;
 use crate::response::handle_response;
 use crate::uinterf::Config;
@@ -30,8 +33,9 @@ pub fn handle_event(config: &Config, pgraph: &mut PGraph, cevent: &CEvent) -> Re
                 let creator_node = match pgraph.get_latest_prior_mut(creator_pid, event.ktime) {
                     Some(r) => r,
                     None => {
-                        if cfg!(debug_assertions) {
+                        if build_params::ASSERTS {
                             eprintln!("Unknown Creator Process for ({:?})", (event));
+                            process::exit(1);
                         }
                         return Ok(());
                     }

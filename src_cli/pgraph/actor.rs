@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     detection::{PolicyVerdict, Protectee},
+    incident,
     pgraph::{AccessType, Event, EventArgs},
     uinterf::Config,
     utils,
@@ -191,7 +192,8 @@ impl Actor {
                 #[allow(unused)]
                 creator_pid,
             } => {
-                panic!("Not supported");
+                incident!("Not supported", config);
+                return PolicyVerdict::Benign;
             }
         }
     }
@@ -216,7 +218,7 @@ impl Actor {
         utils::assert_canonical_dbgo(fpath);
 
         let protectee = Protectee::File(fpath.to_path_buf());
-        let mode = AccessType::from_str("----c").unwrap();
+        let mode = const { AccessType::from_rwxbc_str_const("----c") };
 
         let entry = self.summary.events.entry(protectee);
         let v = *entry.and_modify(|x| x.union(mode)).or_insert(mode);
@@ -225,8 +227,8 @@ impl Actor {
     }
 
     pub fn handle_rename(&mut self, config: &Config, src: &Path, dest: &Path) -> PolicyVerdict {
-        self.handle_openat(config, src, AccessType::from_str("rw-").unwrap())
-            | self.handle_openat(config, dest, AccessType::from_str("rw-").unwrap())
+        let atype = const { AccessType::from_rwxbc_str_const("rw-") };
+        self.handle_openat(config, src, atype) | self.handle_openat(config, dest, atype)
     }
 
     pub fn handle_mmap(

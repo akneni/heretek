@@ -6,13 +6,16 @@ use std::{
     process::{self, Stdio},
 };
 
-use anyhow::Result;
+use anyhow::{Result, anyhow};
 pub use bpfmap::*;
 
 use crate::uinterf::Config;
 
 pub fn load_bpf_objects(config: &Config) -> Result<()> {
-    let repo_path = config.htek_repo.as_ref().unwrap();
+    let repo_path = &config
+        .htek_repo
+        .as_ref()
+        .ok_or(anyhow!("htek_repo.as_ref() failed"))?;
     let path = Path::new(repo_path);
 
     let out = process::Command::new("pixi")
@@ -35,7 +38,10 @@ pub fn load_bpf_objects(config: &Config) -> Result<()> {
 }
 
 pub fn unload_bpf_objects(config: &Config) -> Result<()> {
-    let repo_path = config.htek_repo.as_ref().unwrap();
+    let repo_path = config
+        .htek_repo
+        .as_ref()
+        .ok_or(anyhow!("htek_repo.as_ref() failed"))?;
     let path = Path::new(repo_path);
 
     let out = process::Command::new("pixi")

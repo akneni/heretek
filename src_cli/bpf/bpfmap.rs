@@ -3,7 +3,7 @@ use std::path::Path;
 use std::{error::Error, slice};
 use std::{io, mem};
 
-use anyhow::{Result, bail};
+use anyhow::{Result, anyhow, bail};
 use aya::{
     Pod,
     maps::{Map, MapData, PerCpuArray},
@@ -37,9 +37,9 @@ struct CEventSlot {
 unsafe impl Pod for CEventSlot {}
 
 impl CEvent {
-    unsafe fn from_bytes(bytes: &[u8]) -> &Self {
+    unsafe fn from_bytes(bytes: &[u8]) -> Result<&Self> {
         let sptr = bytes.as_ptr() as *const Self;
-        unsafe { sptr.as_ref().unwrap() }
+        Ok(unsafe { sptr.as_ref().ok_or(anyhow!("bad pointer"))? })
     }
 
     pub fn fpath_str(&self, x: usize) -> Result<String> {
@@ -105,7 +105,12 @@ impl BpfEventArrayReader {
             while self.tails[cpu] < head {
                 let slot_idx = (self.tails[cpu] % EVENT_BUFFER_SLOTS) as u32;
                 let cpu_slots = self.map.get(&slot_idx, 0)?;
-                let c_event = unsafe { CEvent::from_bytes(&cpu_slots[cpu].bytes) };
+                let c_event = match unsafe { CEvent::from_bytes(&cpu_slots[cpu].bytes) } {
+                    Ok(r) => r,
+                    Err(_e) => {
+                        continue;
+                    }
+                };
 
                 events.push(*c_event);
 

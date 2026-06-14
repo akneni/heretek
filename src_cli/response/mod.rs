@@ -1,18 +1,19 @@
 use std::{
     collections::HashSet,
     fs::{self, File},
-    io::{self, Seek, Write},
-    path::PathBuf,
+    io::{self, Seek, Write as IoWrite},
 };
 
-use directories::ProjectDirs;
+use anyhow::Result;
 use notify_rust::Notification;
 use rustix::process::Signal;
 
 use crate::{
+    build_params,
     detection::PolicyVerdict,
+    incident,
     pgraph::{ActorTuid, PGraph, PGraphNode},
-    uinterf::Config,
+    uinterf::{Config, IncFile},
 };
 
 pub fn handle_response(config: &Config, pgraph_db: &PGraph, violations: &[PolicyVerdict]) {
@@ -56,62 +57,84 @@ pub fn handle_response(config: &Config, pgraph_db: &PGraph, violations: &[Policy
         })
         .collect::<Vec<_>>();
 
+    // Handle the root node for each violation
     for violation in root_violations {
         let evil_root = if let PolicyVerdict::Violation { tuid, .. } = violation {
             tuid
         } else {
             return;
         };
-        let node = pgraph_db.nodes.get(&evil_root).unwrap();
+        let node = match pgraph_db.nodes.get(&evil_root) {
+            Some(r) => r,
+            None => {
+                if !build_params::ASSERTS {
+                    continue;
+                }
+
+                if let Ok(mut inc_file) =
+                    IncFile::new(config, "Seen violation from a node that doesn't exist")
+                {
+                    let _ = inc_file.dmp_stacktrace();
+                    let _ = inc_file.dmp_debugable("Violating TUOD", &violating_tuids);
+                    let _ = inc_file.dmp_pgraph(&pgraph_db);
+                }
+
+                continue;
+            }
+        };
 
         if config.quarentine.contains(&"log".to_string()) {
-            log(node, violation, pgraph_db, violations, &violating_tuids);
+            if let Err(e) = log(
+                config,
+                node,
+                violation,
+                pgraph_db,
+                violations,
+                &violating_tuids,
+            ) {
+                eprintln!("failed to write to alert log: {e}");
+            }
         }
         if config.quarentine.contains(&"notify".to_string()) {
             notify(node);
         }
         if config.quarentine.contains(&"terminate".to_string()) {
-            terminate(pgraph_db, node);
+            terminate(config, pgraph_db, node);
         }
     }
 }
 
-fn alert_log_path() -> PathBuf {
-    let proj = ProjectDirs::from("com", "heretek", "heretek").unwrap();
-    proj.data_dir().join("alerts.log")
-}
-
-pub fn init_alert_log(_config: &Config) {
-    let alert_log = alert_log_path();
+/// Moves everything in alerts.log to alerts_bak.log and ensures that alerts.log is empty and ready for this run.
+pub fn init_alert_log(config: &Config) -> Result<()> {
+    let alert_log = config.dirs.data_dir().join("alerts.log");
     let mut alert_bak = alert_log.clone();
     alert_bak.pop();
     alert_bak.push("alerts_bak.log");
 
     if alert_log.exists() {
-        let alets = fs::read_to_string(&alert_log).unwrap();
+        let alets = fs::read_to_string(&alert_log)?;
 
-        let mut fp = File::options()
-            .create(true)
-            .append(true)
-            .open(&alert_bak)
-            .unwrap();
+        let mut fp = File::options().create(true).append(true).open(&alert_bak)?;
 
-        fp.write(alets.as_bytes()).unwrap();
-        fp.write(b"\n\n").unwrap();
+        fp.write(alets.as_bytes())?;
+        fp.write(b"\n\n")?;
         drop(fp);
 
-        fs::remove_file(&alert_log).unwrap();
-        fs::write(&alert_log, "").unwrap();
+        fs::remove_file(&alert_log)?;
+        fs::write(&alert_log, "")?;
     }
+
+    Ok(())
 }
 
 fn log(
+    config: &Config,
     node: &PGraphNode,
     violation: &PolicyVerdict,
     pgraph_db: &PGraph,
     violations: &[PolicyVerdict],
     violating_tuids: &HashSet<ActorTuid>,
-) {
+) -> Result<()> {
     if let PolicyVerdict::Violation {
         prote,
         attempted_access,
@@ -196,19 +219,14 @@ fn log(
             ));
         }
 
-        println!("{}", alert);
+        let alert_path = config.alert_log_path();
+        let mut fp = File::options().write(true).create(true).open(&alert_path)?;
 
-        let alert_path = alert_log_path();
-        println!("{}", alert_path.display());
-        let mut fp = File::options()
-            .write(true)
-            .create(true)
-            .open(&alert_path)
-            .unwrap();
-
-        fp.seek(io::SeekFrom::End(0)).unwrap();
-        writeln!(fp, "{}", alert).unwrap();
+        fp.seek(io::SeekFrom::End(0))?;
+        writeln!(fp, "{}", alert)?;
     }
+
+    Ok(())
 }
 
 fn is_descendant_of(pgraph_db: &PGraph, child_tuid: ActorTuid, root_tuid: ActorTuid) -> bool {
@@ -231,10 +249,16 @@ fn is_descendant_of(pgraph_db: &PGraph, child_tuid: ActorTuid, root_tuid: ActorT
     false
 }
 
-fn terminate(pgraph_db: &PGraph, evil_root: &PGraphNode) {
+fn terminate(config: &Config, pgraph_db: &PGraph, evil_root: &PGraphNode) {
     let mut to_kill = evil_root.child_tuids.clone();
 
-    let pid = rustix::process::Pid::from_raw(evil_root.actor.id.pid).unwrap();
+    let pid = match rustix::process::Pid::from_raw(evil_root.actor.id.pid) {
+        Some(r) => r,
+        None => {
+            incident!("Rustix PID Conversion Failed 1", config);
+            return;
+        }
+    };
     let _ = rustix::process::kill_process(pid, Signal::KILL);
 
     while !to_kill.is_empty() {
@@ -249,7 +273,13 @@ fn terminate(pgraph_db: &PGraph, evil_root: &PGraphNode) {
                 to_kill_childs.insert(*cn);
             }
 
-            let pid = rustix::process::Pid::from_raw(tuid.pid).unwrap();
+            let pid = match rustix::process::Pid::from_raw(evil_root.actor.id.pid) {
+                Some(r) => r,
+                None => {
+                    incident!("Rustix PID Conversion Failed 2", config);
+                    continue;
+                }
+            };
             let _ = rustix::process::kill_process(pid, Signal::KILL);
         }
         to_kill = to_kill_childs;
@@ -262,7 +292,7 @@ fn notify(node: &PGraphNode) {
         .actor_md
         .binary
         .last()
-        .map(|x| x.to_str().unwrap())
+        .map(|x| x.to_str().unwrap_or("[unknown binary]"))
         .unwrap_or("[unknown binary]");
 
     let res = Notification::new()
