@@ -4,7 +4,6 @@ use clap::{Arg, ArgMatches, Command as ClapCommand};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CliCommand {
-    Daemon,
     Bringup,
     Bringdown,
     SummaryPid { pid: i32 },
@@ -82,7 +81,6 @@ pub fn command() -> ClapCommand {
 impl CliCommand {
     fn from_matches(matches: &ArgMatches) -> Self {
         match matches.subcommand() {
-            Some(("daemon", _)) => Self::Daemon,
             Some(("up", _)) => Self::Bringup,
             Some(("down", _)) => Self::Bringdown,
             Some(("debug-action", _)) => Self::DebugAction,

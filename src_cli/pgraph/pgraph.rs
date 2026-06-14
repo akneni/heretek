@@ -341,7 +341,7 @@ impl PGraph {
                 match IncFile::new(config, "ASSERTION FAILED [check_unchained_chains_dbgo]") {
                     Ok(r) => r,
                     Err(e) => {
-                        eprintln!("Failed to create incident file: {e}");
+                        tracing::error!("Failed to create incident file: {e}");
                         process::exit(1);
                     }
                 };
@@ -353,7 +353,7 @@ impl PGraph {
         }
 
         if build_params::PERF_TRACKING {
-            println!(
+            tracing::info!(
                 "Time Elapsed [check_unchained_chains_dbgo]: {:?}",
                 timer.elapsed()
             );
@@ -408,7 +408,7 @@ impl PGraph {
                 match IncFile::new(config, "ASSERTION FAILED [check_unchained_chains_dbgo]") {
                     Ok(r) => r,
                     Err(e) => {
-                        eprintln!("Failed to create incident file: {e}");
+                        tracing::error!("Failed to create incident file: {e}");
                         process::exit(1);
                     }
                 };
@@ -420,7 +420,7 @@ impl PGraph {
         }
 
         if build_params::PERF_TRACKING {
-            println!("Time Elapsed [check_cycles_dbgo]: {:?}", timer.elapsed());
+            tracing::info!("Time Elapsed [check_cycles_dbgo]: {:?}", timer.elapsed());
         }
     }
 
