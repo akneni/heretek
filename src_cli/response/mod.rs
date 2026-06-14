@@ -116,8 +116,8 @@ pub fn init_alert_log(config: &Config) -> Result<()> {
 
         let mut fp = File::options().create(true).append(true).open(&alert_bak)?;
 
-        fp.write(alets.as_bytes())?;
-        fp.write(b"\n\n")?;
+        fp.write_all(alets.as_bytes())?;
+        fp.write_all(b"\n\n")?;
         drop(fp);
 
         fs::remove_file(&alert_log)?;
