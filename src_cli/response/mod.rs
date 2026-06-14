@@ -91,9 +91,10 @@ pub fn handle_response(config: &Config, pgraph_db: &PGraph, violations: &[Policy
                 pgraph_db,
                 violations,
                 &violating_tuids,
-            ) {
-                eprintln!("failed to write to alert log: {e}");
-            }
+            )
+        {
+            eprintln!("failed to write to alert log: {e}");
+        }
         if config.quarentine.contains(&"notify".to_string()) {
             notify(node);
         }
@@ -272,7 +273,7 @@ fn terminate(config: &Config, pgraph_db: &PGraph, evil_root: &PGraphNode) {
                 to_kill_childs.insert(*cn);
             }
 
-            let pid = match rustix::process::Pid::from_raw(evil_root.actor.id.pid) {
+            let pid = match rustix::process::Pid::from_raw(tuid.pid) {
                 Some(r) => r,
                 None => {
                     incident!("Rustix PID Conversion Failed 2", config);
