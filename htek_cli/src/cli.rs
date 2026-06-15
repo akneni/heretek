@@ -6,6 +6,7 @@ use clap::{Arg, ArgMatches, Command as ClapCommand};
 pub enum CliCommand {
     Bringup,
     Bringdown,
+    InstallFromRepo,
     SummaryPid { pid: i32 },
     SummaryExe { exe_path: String },
     SetProfile { profile: String, pid: i32 },
@@ -31,9 +32,12 @@ pub fn command() -> ClapCommand {
         .about("Heretek endpoint detection and response")
         .subcommand_required(true)
         .arg_required_else_help(true)
-        .subcommand(ClapCommand::new("daemon").about("Run the Heretek daemon"))
         .subcommand(ClapCommand::new("up").about("Bring up the Heretek daemon"))
         .subcommand(ClapCommand::new("down").about("Bring down the Heretek daemon"))
+        .subcommand(
+            ClapCommand::new("install-from-repo")
+                .about("Install Heretek from the current repository"),
+        )
         .subcommand(
             ClapCommand::new("debug-action")
                 .about("Run a debug action")
@@ -83,6 +87,7 @@ impl CliCommand {
         match matches.subcommand() {
             Some(("up", _)) => Self::Bringup,
             Some(("down", _)) => Self::Bringdown,
+            Some(("install-from-repo", _)) => Self::InstallFromRepo,
             Some(("debug-action", _)) => Self::DebugAction,
             Some(("summary", sub_matches)) => {
                 let target = sub_matches
@@ -123,5 +128,18 @@ impl CliCommand {
                 exe_path: arg.to_string(),
             },
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{CliCommand, parse_from};
+
+    #[test]
+    fn parses_install_from_repo() {
+        assert_eq!(
+            parse_from(["htek", "install-from-repo"]),
+            CliCommand::InstallFromRepo
+        );
     }
 }

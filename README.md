@@ -9,7 +9,12 @@
 
 
 
-## CLI 
+## Userspace Layout
+- `htek_cli` builds the `htek` command-line client.
+- `htek_daemon` builds the `htekd` daemon and owns the eBPF, detection, process graph, response, and tracing code.
+- `htek_lib` contains the configuration and RPC code shared by both binaries.
+
+## CLI
 ### Main Loop
 - The main loop for the daemon will be doing 4 things in sequence perpetually. 
     1) Drain the ring buffers and update it's internal pgraph structure with the events just pulled
@@ -23,8 +28,13 @@
 ### Docs
 - We can start the daemon by doing the following. 
 ```bash
-# Need to be root
-htek daemon
+# Need to be root. This loads the eBPF objects and starts htekd.
+htek up
+```
+
+- The daemon can also be run directly after the eBPF objects are loaded:
+```bash
+sudo htekd
 ```
 
 - We can query a processes summary by doing the following

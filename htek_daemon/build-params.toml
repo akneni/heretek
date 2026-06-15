@@ -1,17 +1,17 @@
 # Users should not change this file. This contains defaults for all build parameters.
-# If you want to change a build parameter, override the default by assigning it a value in ./build-parameters.toml
+# If you want to change a build parameter, override the default in ../build-params.toml.
 
 
 # Size of the per-core ring buffers used to stream events from eBPF to the daemon.
 # Note that is in terms of powers of 2. So 7 means that the ring buf size is (2^7) = 128
 RING_BUF_SIZE_LOG2=14
 
-# Relevent only to the CLI
+# Relevant only to the daemon
 # Enable asserts?
 # Generally only used for develompent/debugging purposes
 ASSERTS=false
 
-# Relevent only to the CLI
+# Relevant only to the daemon
 # Enable performance tracking?
 # Generally only used for develompent/debugging purposes
 PERF_TRACKING=false

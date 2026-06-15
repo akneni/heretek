@@ -15,14 +15,9 @@ fn parse_build_param_str(toml: &str, params: &mut HashMap<String, String>) {
 fn load_build_params() -> HashMap<String, String> {
     let mut build_params: HashMap<String, String> = HashMap::new();
 
-    let bp_str = fs::read_to_string("build_utils/build-params-default.toml")
-        .expect("Required file build_utils/build-params-default.toml can't be read");
-
+    let bp_str = fs::read_to_string("build-params.toml").expect("build-params.toml can't be read");
     parse_build_param_str(&bp_str, &mut build_params);
 
-    if let Ok(bp_str) = fs::read_to_string("build-params.toml") {
-        parse_build_param_str(&bp_str, &mut build_params);
-    }
     build_params
 }
 
@@ -48,7 +43,7 @@ fn rs_infer_type(key: &str, value: &str) -> &'static str {
 }
 
 fn generate_const_rs(build_params: &HashMap<String, String>) {
-    let filename = "src_cli/build_params.rs";
+    let filename = "src/build_params.rs";
 
     let mut payload = String::new();
     for (k, v) in build_params.iter() {

@@ -1,11 +1,7 @@
-mod ipc;
-mod uds_utils;
-
 use std::{fmt::Write, os::unix::net::UnixListener, path::PathBuf, process};
 
 use anyhow::{Context, Result, bail};
-pub use ipc::*;
-pub use uds_utils::*;
+pub use htek_lib::rpc::{Rpc, RpcResult, StreamSendable};
 
 use crate::{
     build_params,

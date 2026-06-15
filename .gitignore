@@ -1,10 +1,5 @@
 **/target/
-htek-ebpf/build/
-script.ipynb
 build/*
 .vscode/*
 script*
-
-# pixi environments
-.pixi/*
-!.pixi/config.toml
+justfile

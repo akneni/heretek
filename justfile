@@ -20,13 +20,15 @@ pull:
 
 install:
     sudo ./target/debug/htek down
-    cargo build
+    cargo build --workspace
     sudo cp ./target/debug/htek /usr/bin/htek
+    sudo cp ./target/debug/htekd /usr/bin/htekd
 
 reinstall:
     sudo ./target/debug/htek down
-    cargo build
+    cargo build --workspace
     sudo cp ./target/debug/htek /usr/bin/htek
+    sudo cp ./target/debug/htekd /usr/bin/htekd
     sudo htek up
 
 restart:
@@ -35,12 +37,12 @@ restart:
 
 start_sync:
     sudo htek down
-    cargo build
-    pixi run load
-    sudo ./target/debug/htek daemon
+    cargo build --workspace
+    pixi run --manifest-path htek_daemon/pixi.toml load
+    sudo ./target/debug/htekd
 
 start_syncr:
     sudo htek down
-    cargo build --release
-    pixi run load
-    sudo ./target/release/htek daemon
+    cargo build --workspace --release
+    pixi run --manifest-path htek_daemon/pixi.toml load
+    sudo ./target/release/htekd

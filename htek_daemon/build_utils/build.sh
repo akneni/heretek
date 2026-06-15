@@ -2,7 +2,7 @@
 
 set -euo pipefail
 
-cargo build
+mkdir -p build
 
 clang \
   -O2 \

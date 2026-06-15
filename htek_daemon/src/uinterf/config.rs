@@ -4,23 +4,17 @@ use std::{
     path::PathBuf,
 };
 
-use anyhow::{Result, bail};
-use directories::ProjectDirs;
+use htek_lib::config::{HtekDirs, LoadedConfig, ProfileConfigFile};
 
-use crate::{
-    build_params,
-    detection::Acl,
-    uinterf::{ConfigFile, ProfileConfigFile},
-};
+use crate::{build_params, detection::Acl};
 
 #[allow(unused)]
 #[derive(Debug, Clone)]
 pub struct Config {
     pub profile_config: ProfileConfig,
     pub quarentine: Vec<String>,
-    pub htek_repo: Option<String>,
     pub acl: Acl,
-    pub dirs: ProjectDirs,
+    pub dirs: HtekDirs,
 }
 
 /// This struct allows us to determine which profile an actro should be
@@ -31,21 +25,14 @@ pub struct ProfileConfig {
 }
 
 impl Config {
-    pub fn from(cfg_file: ConfigFile, acl: Acl) -> Result<Self> {
-        let dirs = match ProjectDirs::from("com", "heretek", "heretek") {
-            Some(r) => r,
-            None => {
-                bail!("Failed to find home path");
-            }
-        };
-        let s = Self {
+    pub fn from(loaded: LoadedConfig, acl: Acl) -> Self {
+        let cfg_file = loaded.file;
+        Self {
             profile_config: ProfileConfig::from(&cfg_file.profile_config),
             quarentine: cfg_file.quarentine,
-            htek_repo: cfg_file.htek_repo,
             acl,
-            dirs,
-        };
-        Ok(s)
+            dirs: loaded.dirs,
+        }
     }
 
     pub fn alert_log_path(&self) -> PathBuf {
@@ -79,9 +66,10 @@ impl ProfileConfig {
     /// PRECONDITION: bin should be the conacical/absolute path to the binary
     pub fn get_profile<'a>(&'a self, bin: &PathBuf) -> &'a str {
         if build_params::ASSERTS
-            && let Ok(bin_abs) = fs::canonicalize(bin) {
-                assert_eq!(&bin_abs, bin);
-            }
+            && let Ok(bin_abs) = fs::canonicalize(bin)
+        {
+            assert_eq!(&bin_abs, bin);
+        }
 
         for (k, v) in self.mappings.iter() {
             if v.contains(bin) {

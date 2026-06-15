@@ -1,34 +1,7 @@
-[package]
-name = "heretek"
+[workspace]
+members = ["htek_cli", "htek_daemon", "htek_lib"]
+resolver = "3"
+
+[workspace.package]
 version = "0.1.0"
 edition = "2024"
-build = "./build.rs"
-
-
-[dependencies]
-anyhow = "1.0.102"
-aya = "0.13.1"
-chrono = "0.4.45"
-clap = "4.6.1"
-directories = "6.0.0"
-glob = "0.3.3"
-libc = "0.2.184"
-notify-rust = "4.17.0"
-rustix = "1.1.4"
-serde = { version = "1.0.228", features = ["derive"] }
-serde_json = "1.0.149"
-tracing = "0.1.44"
-tracing-subscriber = "0.3.23"
-whoami = "2.1.1"
-
-[build-dependencies]
-
-
-
-[[bin]]
-name = "htek"
-path = "src_cli/main_cli.rs"
-
-[[bin]]
-name = "htekd"
-path = "src_cli/main_daemon.rs"

@@ -1,24 +1,16 @@
 use std::{
-    fs::{self, File},
+    fs::File,
     os::unix::net::UnixListener,
-    process::{self, Stdio},
-    thread,
+    process, thread,
     time::{Duration, Instant},
 };
 
 use anyhow::{Context, Result, bail};
-use directories::ProjectDirs;
 use tracing_subscriber::prelude::*;
 
+use crate::bpf::BpfEventArrayReader;
 use crate::pgraph::PGraph;
-use crate::{
-    bpf::BpfEventArrayReader,
-    rpc::{RpcResult, StreamSendable},
-};
-use crate::{
-    detection::Acl,
-    uinterf::{Config, ConfigFile},
-};
+use crate::{detection::Acl, uinterf::Config};
 
 mod bpf;
 mod detection;
@@ -32,39 +24,11 @@ mod perftracker;
 mod utils;
 
 fn preflight() -> Result<Config> {
-    if "root" != whoami::account()? {
-        bail!("Heretek needs to be ran as root!");
-    }
-
-    match whoami::platform() {
-        whoami::Platform::Linux => {}
-        _ => bail!("Unsupported platform! Currently supported platforms: Linux"),
-    }
-
-    let proj = match ProjectDirs::from("com", "heretek", "heretek") {
-        Some(r) => r,
-        None => {
-            bail!("No valid home directory could be found");
-        }
-    };
-    fs::create_dir_all(proj.config_dir())?;
-
-    let config_path = proj.config_dir().join("config.json");
-    if !config_path.exists() {
-        let d_conkfig = ConfigFile::default();
-        let dc_str = serde_json::to_string_pretty(&d_conkfig)?;
-        fs::write(&config_path, &dc_str)?;
-    }
-
-    let acl_path = proj.config_dir().join("ACL.json");
+    let loaded = htek_lib::config::LoadedConfig::load()?;
+    let acl_path = loaded.dirs.config_dir().join("ACL.json");
     let acl = Acl::from_acl_file(&acl_path).context("Failed to parse ACL")?;
 
-    let c_str = fs::read_to_string(&config_path)?;
-    let config_file: ConfigFile =
-        serde_json::from_str(&c_str).context("Failed to parse ConfigFile")?;
-
-    let cfg = Config::from(config_file, acl)?;
-    Ok(cfg)
+    Ok(Config::from(loaded, acl))
 }
 
 fn daemon_init(config: &Config) -> Result<(UnixListener, BpfEventArrayReader)> {
@@ -80,7 +44,7 @@ fn daemon_init(config: &Config) -> Result<(UnixListener, BpfEventArrayReader)> {
 
     tracing::warn!("started up successfully");
 
-    let socket = rpc::try_create_uds_ipc(config)?;
+    let socket = htek_lib::rpc::try_create_listener(&config.dirs)?;
     socket.set_nonblocking(true)?;
 
     let bpf_reader = bpf::BpfEventArrayReader::from_pinned_path("/sys/fs/bpf/heretek-maps/events");
