@@ -2,14 +2,15 @@ use std::{
     collections::{HashMap, HashSet},
     fs,
     path::{Path, PathBuf},
+    process,
 };
 
 use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};
 
 use crate::{
+    build_params,
     detection::{PolicyVerdict, Protectee},
-    incident,
     pgraph::{AccessType, Event, EventArgs},
     uinterf::Config,
     utils,
@@ -51,6 +52,11 @@ pub struct ActorMd {
     // If multiple binaries executed with the same profile, then this list will be less than `n`
     // elements log
     pub profile: HashSet<String>,
+
+    // All profiles in this field will not be used to check permissions for actions this actor
+    // takes. All processes this actor spawns will inherit profiles from `.profile` and
+    // `.child_profile`
+    pub child_profile: HashSet<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -66,6 +72,7 @@ impl ActorMd {
             state: ActorState::Running,
             binary: vec![],
             profile: HashSet::new(),
+            child_profile: HashSet::new(),
             argv: vec![],
             cwd: None,
         }
@@ -192,7 +199,12 @@ impl Actor {
                 #[allow(unused)]
                 creator_pid,
             } => {
-                incident!("Not supported", config);
+                if build_params::ASSERTS {
+                    tracing::error!("This codepath should not be reachable.");
+                    process::exit(1);
+                } else {
+                    tracing::warn!("This codepath should not be reachable.");
+                }
                 PolicyVerdict::Benign
             }
         }
@@ -257,12 +269,18 @@ impl Actor {
             }
         };
 
+        // TODO: processes should inherit profiles from parents, and then reset these profiles at the first execve call
+        // All other execve calls should not reset/wipe profiles
+        // Make sure not to wipe out creator's child_profile while resetting.
+
         let args = Self::get_cmdline(self.id.pid).ok();
         let profile = config.profile_config.get_profile(&binary_path);
 
         self.actor_md.binary.push(binary_path);
         self.actor_md.argv.push(args);
-        self.actor_md.profile.insert(profile.to_string());
+        if profile != "unchained" {
+            self.actor_md.profile.insert(profile.to_string());
+        }
 
         PolicyVerdict::Benign
     }

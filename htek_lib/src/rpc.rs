@@ -1,4 +1,5 @@
 use std::{
+    collections::HashSet,
     fs,
     io::{Read, Write},
     os::unix::net::{UnixListener, UnixStream},
@@ -18,6 +19,7 @@ pub enum Rpc {
     GetSummaryExe { exe_path: String },
     SetProfile { profile: String, pid: i32 },
     Bringdown { unload_bpf: bool },
+    SetChildProfile { pid: i32, profiles: HashSet<String> },
     Touched { file: PathBuf },
     DebugAction,
 }
@@ -27,6 +29,7 @@ pub enum RpcResult {
     GetSummary(String),
     SetProfileRes { msg: String, success: bool },
     BringdownRes(String),
+    SetChildProfileRes { msg: String, success: bool },
     TouchedRes(String),
     DebugActionRes(String),
 }

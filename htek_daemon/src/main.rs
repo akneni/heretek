@@ -42,8 +42,6 @@ fn daemon_init(config: &Config) -> Result<(UnixListener, BpfEventArrayReader)> {
         .with(tracing_subscriber::fmt::layer().with_writer(trc_fp))
         .init();
 
-    tracing::warn!("started up successfully");
-
     let socket = htek_lib::rpc::try_create_listener(&config.dirs)?;
     socket.set_nonblocking(true)?;
 
@@ -87,6 +85,7 @@ fn main() {
     let iter_interval = Duration::from_micros(50_000);
     let mut ttracker = perftracker::PerfTracker::new();
 
+    tracing::info!("htekd started successfully. Entering main loop../");
     loop {
         let timer = Instant::now();
         ttracker.start_iter();

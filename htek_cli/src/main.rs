@@ -1,8 +1,4 @@
-use std::{
-    fs,
-    path::Path,
-    process::{self, Stdio},
-};
+use std::{collections::HashSet, ffi::OsString, fs, path::Path, process};
 
 use anyhow::{Context, Result, bail};
 use htek_lib::{
@@ -10,11 +6,15 @@ use htek_lib::{
     rpc::{self, Rpc, RpcResult, StreamSendable},
 };
 
-use crate::cli::CliCommand;
+use crate::{
+    cli::{CliCommand, SpawnMode},
+    utils::spawn_cmd,
+};
 
 mod cli;
+mod utils;
 
-fn bringup(config: &LoadedConfig) -> Result<()> {
+fn bringup(_config: &LoadedConfig) -> Result<()> {
     // rpc::check_not_running(&config.dirs)?;
     // println!("Loading eBPF objects");
     // bpf::load(config)?;
@@ -30,7 +30,7 @@ fn bringup(config: &LoadedConfig) -> Result<()> {
     Ok(())
 }
 
-fn bringdown(config: &LoadedConfig) -> Result<()> {
+fn bringdown(_config: &LoadedConfig) -> Result<()> {
     // match rpc::try_connect(&config.dirs) {
     //     Ok(stream) => {
     //         Rpc::Bringdown { unload_bpf: false }.try_stream_send(&stream)?;
@@ -106,6 +106,40 @@ fn rpc_call(config: &LoadedConfig, request: Rpc) -> Result<RpcResult> {
     RpcResult::try_stream_recv(&stream)
 }
 
+fn spawn_as_profile(
+    config: &LoadedConfig,
+    profile: Option<String>,
+    mode: Option<SpawnMode>,
+    command: Vec<OsString>,
+) -> Result<()> {
+    // Sets the profile if one is provides
+    if let Some(profile) = profile {
+        let mut profiles = HashSet::new();
+        profiles.insert(profile);
+
+        let stream = rpc::try_connect(&config.dirs)?;
+
+        let req = rpc::Rpc::SetChildProfile {
+            pid: process::id() as i32,
+            profiles,
+        };
+        req.try_stream_send(&stream)?;
+
+        let res = rpc::RpcResult::try_stream_recv(&stream)?;
+        if let rpc::RpcResult::SetChildProfileRes { msg, success } = res {
+            if !success {
+                bail!(msg);
+            }
+        } else {
+            bail!("unknown result");
+        }
+    }
+
+    // Spawns the command
+    let mode = mode.unwrap_or(SpawnMode::Sync);
+    spawn_cmd(command, mode)
+}
+
 fn run(config: &LoadedConfig, command: CliCommand) -> Result<()> {
     match command {
         CliCommand::Bringup => bringup(config),
@@ -139,6 +173,14 @@ fn run(config: &LoadedConfig, command: CliCommand) -> Result<()> {
                 }
                 _ => bail!("Daemon returned an unexpected response"),
             }
+        }
+        CliCommand::Spawn {
+            profile,
+            mode,
+            command,
+        } => {
+            spawn_as_profile(config, profile, mode, command)?;
+            Ok(())
         }
         CliCommand::Touched { file } => {
             let file = fs::canonicalize(file).context("Failed to resolve file")?;

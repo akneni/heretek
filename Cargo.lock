@@ -628,6 +628,7 @@ dependencies = [
  "anyhow",
  "clap",
  "htek_lib",
+ "whoami",
 ]
 
 [[package]]

@@ -24,6 +24,7 @@ pub fn handle_event(config: &Config, pgraph: &mut PGraph, cevent: &CEvent) -> Re
             let creator_pid = match event.args {
                 EventArgs::Start { creator_pid } => creator_pid,
                 _ => {
+                    // TODO: make an ASSERTS aware-unreachable macro.
                     unreachable!();
                 }
             };
@@ -33,8 +34,8 @@ pub fn handle_event(config: &Config, pgraph: &mut PGraph, cevent: &CEvent) -> Re
                 let creator_node = match pgraph.get_latest_prior_mut(creator_pid, event.ktime) {
                     Some(r) => r,
                     None => {
+                        tracing::warn!("Unknown Creator Process for ({:?})", (event));
                         if build_params::ASSERTS {
-                            eprintln!("Unknown Creator Process for ({:?})", (event));
                             process::exit(1);
                         }
                         return Ok(());

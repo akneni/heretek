@@ -71,6 +71,9 @@ pub fn handle_rpc(config: &Config, pgraph_db: &mut PGraph, socket: &UnixListener
             };
             res.try_stream_send(&mut stream)?;
         }
+        Rpc::SetChildProfile { pid, profiles } => {
+            todo!("TODO");
+        }
         Rpc::Bringdown { unload_bpf } => {
             if unload_bpf {
                 eprintln!("Unloading BPF is not yet implemented");

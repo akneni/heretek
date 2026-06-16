@@ -1,16 +1,36 @@
 use std::ffi::OsString;
 
-use clap::{Arg, ArgMatches, Command as ClapCommand};
+use clap::{Arg, ArgAction, ArgMatches, Command as ClapCommand, builder::OsStringValueParser};
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SpawnMode {
+    Async,
+    Sync,
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CliCommand {
     Bringup,
     Bringdown,
     InstallFromRepo,
-    SummaryPid { pid: i32 },
-    SummaryExe { exe_path: String },
-    SetProfile { profile: String, pid: i32 },
-    Touched { file: String },
+    SummaryPid {
+        pid: i32,
+    },
+    SummaryExe {
+        exe_path: String,
+    },
+    SetProfile {
+        profile: String,
+        pid: i32,
+    },
+    Spawn {
+        profile: Option<String>,
+        mode: Option<SpawnMode>,
+        command: Vec<OsString>,
+    },
+    Touched {
+        file: String,
+    },
     DebugAction,
 }
 
@@ -71,6 +91,40 @@ pub fn command() -> ClapCommand {
                 ),
         )
         .subcommand(
+            ClapCommand::new("spawn")
+                .about("Spawn a command under a profile")
+                .arg(
+                    Arg::new("profile")
+                        .short('p')
+                        .value_name("profile")
+                        .help("Profile to assign to the spawned process"),
+                )
+                .arg(
+                    Arg::new("async")
+                        .short('a')
+                        .action(ArgAction::SetTrue)
+                        .conflicts_with("sync")
+                        .help("Spawn the command, detach it, and exit"),
+                )
+                .arg(
+                    Arg::new("sync")
+                        .short('s')
+                        .action(ArgAction::SetTrue)
+                        .conflicts_with("async")
+                        .help("Spawn the command with stdio attached to htek"),
+                )
+                .arg(
+                    Arg::new("command")
+                        .value_name("command-to-run")
+                        .value_parser(OsStringValueParser::new())
+                        .required(true)
+                        .num_args(1..)
+                        .trailing_var_arg(true)
+                        .allow_hyphen_values(true)
+                        .help("Command and arguments to run"),
+                ),
+        )
+        .subcommand(
             ClapCommand::new("touched")
                 .about("Show processes that accessed a file")
                 .arg(
@@ -109,6 +163,27 @@ impl CliCommand {
 
                 Self::SetProfile { profile, pid }
             }
+            Some(("spawn", sub_matches)) => {
+                let profile = sub_matches.get_one::<String>("profile").cloned();
+                let mode = if sub_matches.get_flag("async") {
+                    Some(SpawnMode::Async)
+                } else if sub_matches.get_flag("sync") {
+                    Some(SpawnMode::Sync)
+                } else {
+                    None
+                };
+                let command = sub_matches
+                    .get_many::<OsString>("command")
+                    .expect("clap ensures command is present")
+                    .cloned()
+                    .collect();
+
+                Self::Spawn {
+                    profile,
+                    mode,
+                    command,
+                }
+            }
             Some(("touched", sub_matches)) => {
                 let file = sub_matches
                     .get_one::<String>("file")
@@ -133,13 +208,51 @@ impl CliCommand {
 
 #[cfg(test)]
 mod tests {
-    use super::{CliCommand, parse_from};
+    use super::{CliCommand, SpawnMode, parse_from};
 
     #[test]
     fn parses_install_from_repo() {
         assert_eq!(
             parse_from(["htek", "install-from-repo"]),
             CliCommand::InstallFromRepo
+        );
+    }
+
+    #[test]
+    fn parses_spawn_with_profile() {
+        assert_eq!(
+            parse_from([
+                "htek", "spawn", "-p", "hardened", "-s", "--", "npm", "run", "build"
+            ]),
+            CliCommand::Spawn {
+                profile: Some("hardened".to_string()),
+                mode: Some(SpawnMode::Sync),
+                command: vec!["npm".into(), "run".into(), "build".into()],
+            }
+        );
+    }
+
+    #[test]
+    fn parses_spawn_without_profile() {
+        assert_eq!(
+            parse_from(["htek", "spawn", "--", "bash", "-lc", "echo hi"]),
+            CliCommand::Spawn {
+                profile: None,
+                mode: None,
+                command: vec!["bash".into(), "-lc".into(), "echo hi".into()],
+            }
+        );
+    }
+
+    #[test]
+    fn parses_spawn_async() {
+        assert_eq!(
+            parse_from(["htek", "spawn", "-a", "--", "sleep", "60"]),
+            CliCommand::Spawn {
+                profile: None,
+                mode: Some(SpawnMode::Async),
+                command: vec!["sleep".into(), "60".into()],
+            }
         );
     }
 }

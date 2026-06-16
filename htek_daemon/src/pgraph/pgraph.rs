@@ -148,21 +148,26 @@ impl PGraph {
 
     /// Inserts the actor into the PGraph data structure
     /// This makes sure to update the creator PGraphNode and pid_map to keep everything consistent
-    pub fn insert_actor(&mut self, actor: Actor, creator_tuid: ActorTuid) {
+    pub fn insert_actor(&mut self, mut actor: Actor, creator_tuid: ActorTuid) {
         // Update creator's child vec
         let creator = match self.nodes.get_mut(&creator_tuid) {
             Some(r) => r,
             None => {
                 if build_params::ASSERTS {
-                    panic!("insert_actor called with a creator_tuid that doesn't exist");
+                    tracing::error!("insert_actor called with a creator_tuid that doesn't exist");
+                    process::exit(1);
                 }
                 return;
             }
         };
-
         creator.child_tuids.insert(actor.id);
         let unchained_chain = creator.unchained_chain && actor.actor_md.profile.is_empty();
         let cwd = creator.actor.actor_md.cwd.clone();
+
+        // Make Child actor inheric creator's child profiles
+        for prof in creator.actor.actor_md.child_profile.iter() {
+            actor.actor_md.profile.insert(prof.clone());
+        }
 
         // Update pid map
         let entry = self.pid_map.entry(actor.id.pid);
