@@ -231,8 +231,24 @@ fn cfgpush(_config: &LoadedConfig) -> Result<()> {
     Ok(())
 }
 
-fn init(_config: &LoadedConfig, _force: bool) -> Result<()> {
-    bail!("init is not implemented yet")
+fn init(config: &LoadedConfig, force: bool) -> Result<()> {
+    let mfile = config.dirs.htek_magic_file_path();
+    let cfg_dir = config.dirs.config_dir();
+    let data_dir = config.dirs.data_dir();
+    if !force && !mfile.exists() && (cfg_dir.exists() || data_dir.exists()) {
+        let msg = r#"
+            It seems like another app is already using the heretek config & data directory.
+            If want to forcibly overwrite these directories, run `sudo htek init --force`
+        "#;
+        bail!(msg);
+    }
+
+    fs::remove_dir_all(&cfg_dir)?;
+    fs::remove_dir_all(&data_dir)?;
+
+    htek_lib::config::validate_environment()?;
+
+    Ok(())
 }
 
 fn rpc_call(config: &LoadedConfig, request: Rpc) -> Result<RpcResult> {
