@@ -31,5 +31,10 @@ pub fn unreachable() {
 /// This functions returns an error or never returns.
 pub fn clean_shutdown(config: &Config) -> Result<()> {
     bpf::unload_all_bpf_obj(config)?;
+
+    if let Err(e) = fs::remove_file(config.dirs.socket_path()) {
+        tracing::warn!("Failed to clean up UDS file on exit: {e}");
+    }
+
     process::exit(0);
 }

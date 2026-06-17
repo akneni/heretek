@@ -22,7 +22,7 @@
       "/home/*/.cache/**": "rw-bc",
       "/home/*/.local/share/**": "rw-bc",
 
-      "/root/.config/heretek/**": "r--c-"
+      "/root/.config/heretek/**": "r--bc"
     }
   }
 }

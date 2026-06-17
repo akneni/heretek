@@ -616,6 +616,7 @@ dependencies = [
  "serde_json",
  "tracing",
  "tracing-subscriber",
+ "whoami",
 ]
 
 [[package]]
@@ -623,6 +624,7 @@ name = "htek_lib"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "rustix",
  "serde",
  "serde_json",
  "whoami",

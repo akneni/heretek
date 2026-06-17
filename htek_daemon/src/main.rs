@@ -24,6 +24,10 @@ mod perftracker;
 mod utils;
 
 fn preflight() -> Result<Config> {
+    if whoami::username()? != "root" {
+        bail!("root privilages required");
+    }
+
     let loaded = htek_lib::config::LoadedConfig::load()?;
     let acl_path = loaded.dirs.acl_path();
     let acl = Acl::from_acl_file(&acl_path).context("Failed to parse ACL")?;

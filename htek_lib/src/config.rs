@@ -1,6 +1,7 @@
 use std::{
     collections::HashMap,
     fs,
+    os::unix::fs::PermissionsExt,
     path::{Path, PathBuf},
 };
 
@@ -139,17 +140,24 @@ pub fn validate_environment() -> Result<()> {
             bail!("Htek Directories found without magic file. Possible application name clash?");
         }
 
+        // Create all config and data directories
         fs::create_dir_all(HtekDirs.config_dir())?;
         fs::create_dir_all(HtekDirs.data_dir())?;
         fs::create_dir_all(HtekDirs.bpf_obj_path())?;
+        fs::set_permissions(HtekDirs.config_dir(), fs::Permissions::from_mode(0o755))?;
+        fs::set_permissions(HtekDirs.data_dir(), fs::Permissions::from_mode(0o755))?;
 
+        // Create config files
         fs::write(HtekDirs.config_path(), CONFIG_JSON)?;
         fs::write(HtekDirs.acl_path(), ACL_JSON)?;
+        fs::set_permissions(HtekDirs.config_path(), fs::Permissions::from_mode(0o644))?;
 
+        // Create magic file
         fs::write(
-            mfile,
+            &mfile,
             "This file prevents collitions on the name heretek. Ignore it but dont delete it.",
         )?;
+        fs::set_permissions(&mfile, fs::Permissions::from_mode(0o644))?;
     }
 
     Ok(())

@@ -12,7 +12,7 @@ use std::{
 
 use anyhow::{Context, Result, anyhow, bail};
 use htek_lib::{
-    config::LoadedConfig,
+    config::{HtekDirs, LoadedConfig},
     rpc::{self, Rpc, RpcResult, StreamSendable},
 };
 use rustix::process::{Gid, Uid};
@@ -26,6 +26,10 @@ mod cli;
 mod utils;
 
 fn bringup(config: &LoadedConfig) -> Result<()> {
+    if whoami::username()? != "root" {
+        bail!("Requires root privilages");
+    }
+
     if let Ok(_) = rpc::try_connect(&config.dirs) {
         eprintln!("heretek daemon seems to already be running!");
         return Ok(());
@@ -60,6 +64,10 @@ fn bringup(config: &LoadedConfig) -> Result<()> {
 }
 
 fn bringdown(config: &LoadedConfig) -> Result<()> {
+    if whoami::username()? != "root" {
+        bail!("Requires root privilages");
+    }
+
     let mut sleep_ms = 75;
     for i in 0..4 {
         match rpc::try_connect(&config.dirs) {
@@ -130,6 +138,10 @@ fn purge_bpf_objects(config: &LoadedConfig) -> Result<()> {
 }
 
 fn install_from_repo(config: &LoadedConfig) -> Result<()> {
+    if whoami::username()? != "root" {
+        bail!("Requires root privilages");
+    }
+
     let build = Path::new("build");
 
     for file in ["htek", "htekd"] {
@@ -202,6 +214,10 @@ fn cfgpull(config: &LoadedConfig) -> Result<()> {
 /// Pushes config.json and ACL.json from the current directory the heretek config directory
 /// Skips over either of these files if they don't exist in the current directory.
 fn cfgpush(_config: &LoadedConfig) -> Result<()> {
+    if whoami::username()? != "root" {
+        bail!("Requires root privilages");
+    }
+
     let cgf_files = [
         Path::new("/root/.config/heretek/ACL.json"),
         Path::new("/root/.config/heretek/config.json"),
@@ -227,20 +243,31 @@ fn cfgpush(_config: &LoadedConfig) -> Result<()> {
             .with_context(|| format!("failed to chown {}", fpath_hcfg.display()))?;
 
         fs::set_permissions(fpath_hcfg, fs::Permissions::from_mode(0o644))?;
+
+        println!("Successfully pushed {}", fpath_cwd.display());
     }
     Ok(())
 }
 
-fn init(config: &LoadedConfig, force: bool) -> Result<()> {
-    let mfile = config.dirs.htek_magic_file_path();
-    let cfg_dir = config.dirs.config_dir();
-    let data_dir = config.dirs.data_dir();
-    if !force && !mfile.exists() && (cfg_dir.exists() || data_dir.exists()) {
-        let msg = r#"
-            It seems like another app is already using the heretek config & data directory.
-            If want to forcibly overwrite these directories, run `sudo htek init --force`
-        "#;
-        bail!(msg);
+fn init(force: bool) -> Result<()> {
+    if whoami::username()? != "root" {
+        bail!("Requires root privilages");
+    }
+
+    let mfile = HtekDirs.htek_magic_file_path();
+    let cfg_dir = HtekDirs.config_dir();
+    let data_dir = HtekDirs.data_dir();
+
+    if !force {
+        if !mfile.exists() && (cfg_dir.exists() || data_dir.exists()) {
+            let msg = r#"
+                It seems like another app is already using the heretek config & data directory.
+                If want to forcibly overwrite these directories, run `sudo htek init --force`
+            "#;
+            bail!(msg);
+        } else if mfile.exists() {
+            return Ok(());
+        }
     }
 
     fs::remove_dir_all(&cfg_dir)?;
@@ -297,7 +324,7 @@ fn run(config: &LoadedConfig, command: CliCommand) -> Result<()> {
         CliCommand::Bringdown => bringdown(config),
         CliCommand::CfgPull => cfgpull(config),
         CliCommand::CfgPush => cfgpush(config),
-        CliCommand::Init { force } => init(config, force),
+        CliCommand::Init { .. } => unreachable!(),
         CliCommand::InstallFromRepo => install_from_repo(config),
         CliCommand::SummaryPid { pid } => match rpc_call(config, Rpc::GetSummaryPid { pid })? {
             RpcResult::GetSummary(summary) => {
@@ -357,8 +384,25 @@ fn run(config: &LoadedConfig, command: CliCommand) -> Result<()> {
 }
 
 fn main() {
-    let result =
-        htek_lib::config::LoadedConfig::load().and_then(|config| run(&config, cli::parse_cli()));
+    let cli_args = cli::parse_cli();
+    if let &CliCommand::Init { force } = &cli_args {
+        if let Err(e) = init(force) {
+            eprintln!("{e}");
+            process::exit(1);
+        }
+        process::exit(0);
+    }
+
+    let config = match htek_lib::config::LoadedConfig::load() {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("Failed to load config: {e}");
+            process::exit(1);
+        }
+    };
+
+    let result = run(&config, cli_args);
+
     if let Err(error) = result {
         eprintln!("{error:#}");
         process::exit(1);

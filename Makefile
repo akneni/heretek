@@ -9,3 +9,4 @@ build:
 
 install:
 	./build/htek install-from-repo
+	./build/htek init
