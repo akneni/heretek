@@ -167,7 +167,7 @@ fn install_from_repo(config: &LoadedConfig) -> Result<()> {
             bail!("unknown file type: {}", file.path().display());
         };
 
-        fs::copy(&file.path(), &dest)?;
+        fs::copy(file.path(), &dest)?;
     }
 
     println!("Finished installing htek, htekd, and all eBPF objects!");
@@ -271,8 +271,8 @@ fn init(force: bool) -> Result<()> {
         }
     }
 
-    fs::remove_dir_all(&cfg_dir)?;
-    fs::remove_dir_all(&data_dir)?;
+    fs::remove_dir_all(cfg_dir)?;
+    fs::remove_dir_all(data_dir)?;
 
     htek_lib::config::validate_environment()?;
 

@@ -2,7 +2,6 @@ use std::os::unix::fs::PermissionsExt;
 use std::{fs, path::Path};
 
 use anyhow::Result;
-use rustix;
 use rustix::fs::{Gid, Uid};
 
 ///
