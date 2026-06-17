@@ -3,6 +3,7 @@ use std::{
     ffi::OsString,
     fs,
     io::{self, Write},
+    os::unix::fs::PermissionsExt,
     path::Path,
     process::{self, Stdio},
     thread,
@@ -14,10 +15,11 @@ use htek_lib::{
     config::LoadedConfig,
     rpc::{self, Rpc, RpcResult, StreamSendable},
 };
+use rustix::process::{Gid, Uid};
 
 use crate::{
     cli::{CliCommand, SpawnMode},
-    utils::{ACL_JSON, CONFIG_JSON, get_nonroot_user, spawn_cmd},
+    utils::spawn_cmd,
 };
 
 mod cli;
@@ -83,7 +85,7 @@ fn bringdown(config: &LoadedConfig) -> Result<()> {
 }
 
 fn print_daemon_traces(config: &LoadedConfig) -> Result<()> {
-    let traces = match fs::read(config.dirs.tracefile_path()?) {
+    let traces = match fs::read(config.dirs.tracefile_path()) {
         Ok(r) => r,
         Err(_) => {
             println!("Daemon tracefile doesn't exist!");
@@ -105,7 +107,7 @@ fn print_daemon_traces(config: &LoadedConfig) -> Result<()> {
 
 /// Deletes all .ebpf.o files inside of the eBPF object directory
 fn purge_bpf_objects(config: &LoadedConfig) -> Result<()> {
-    let bpf_dir = config.dirs.bpf_obj_path()?;
+    let bpf_dir = config.dirs.bpf_obj_path();
 
     for entry in
         fs::read_dir(&bpf_dir).with_context(|| format!("Failed to read {}", bpf_dir.display()))?
@@ -137,7 +139,7 @@ fn install_from_repo(config: &LoadedConfig) -> Result<()> {
         }
     }
 
-    let bpf_dir = config.dirs.bpf_obj_path()?;
+    let bpf_dir = config.dirs.bpf_obj_path();
     purge_bpf_objects(config)?;
     for file in build.read_dir()? {
         let file = file?;
@@ -159,11 +161,24 @@ fn install_from_repo(config: &LoadedConfig) -> Result<()> {
     Ok(())
 }
 
-fn cfgpull(_config: &LoadedConfig) -> Result<()> {
+fn cfgpull(config: &LoadedConfig) -> Result<()> {
     let cgf_files = [
-        (Path::new("/root/.config/heretek/ACL.json"), ACL_JSON),
-        (Path::new("/root/.config/heretek/config.json"), CONFIG_JSON),
+        (config.dirs.acl_path(), htek_lib::config::ACL_JSON),
+        (config.dirs.config_path(), htek_lib::config::CONFIG_JSON),
     ];
+
+    let owner = if whoami::account()? == "root" {
+        let uid = std::env::var("SUDO_UID")
+            .context("Cannot determine non-root user: SUDO_UID is not set")?
+            .parse()?;
+        let gid = std::env::var("SUDO_GID")
+            .context("Cannot determine non-root user: SUDO_GID is not set")?
+            .parse()?;
+        (Uid::from_raw(uid), Gid::from_raw(gid))
+    } else {
+        (rustix::process::getuid(), rustix::process::getgid())
+    };
+
     for (fpath_hcfg, default) in cgf_files {
         let fname = fpath_hcfg
             .file_name()
@@ -172,23 +187,14 @@ fn cfgpull(_config: &LoadedConfig) -> Result<()> {
             .ok_or(anyhow!("failed to get filename"))?;
 
         if fpath_hcfg.exists() {
-            fs::copy(fpath_hcfg, fname)?;
+            fs::copy(&fpath_hcfg, fname)?;
         } else {
             fs::write(fname, default)?;
         }
 
         let fpath_cwd = Path::new(fname);
-        let output = process::Command::new("chown")
-            .arg(get_nonroot_user()?)
-            .arg(fpath_cwd)
-            .output()?;
-        if !output.status.success() {
-            bail!(
-                "failed to chown {}: {}",
-                fpath_cwd.display(),
-                String::from_utf8_lossy(&output.stderr)
-            );
-        }
+        rustix::fs::chown(fpath_cwd, Some(owner.0), Some(owner.1))
+            .with_context(|| format!("failed to chown {}", fpath_cwd.display()))?;
     }
     Ok(())
 }
@@ -196,7 +202,37 @@ fn cfgpull(_config: &LoadedConfig) -> Result<()> {
 /// Pushes config.json and ACL.json from the current directory the heretek config directory
 /// Skips over either of these files if they don't exist in the current directory.
 fn cfgpush(_config: &LoadedConfig) -> Result<()> {
-    bail!("cfgpush is not implemented yet")
+    let cgf_files = [
+        Path::new("/root/.config/heretek/ACL.json"),
+        Path::new("/root/.config/heretek/config.json"),
+    ];
+    for fpath_hcfg in cgf_files {
+        let fname = fpath_hcfg
+            .file_name()
+            .ok_or(anyhow!("failed to get filename"))?
+            .to_str()
+            .ok_or(anyhow!("failed to get filename"))?;
+        let fpath_cwd = Path::new(fname);
+
+        if !fpath_cwd.exists() {
+            continue;
+        }
+
+        if let Some(parent) = fpath_hcfg.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        fs::copy(fpath_cwd, fpath_hcfg)?;
+
+        rustix::fs::chown(fpath_hcfg, Some(Uid::ROOT), Some(Gid::ROOT))
+            .with_context(|| format!("failed to chown {}", fpath_hcfg.display()))?;
+
+        fs::set_permissions(fpath_hcfg, fs::Permissions::from_mode(0o644))?;
+    }
+    Ok(())
+}
+
+fn init(_config: &LoadedConfig, _force: bool) -> Result<()> {
+    bail!("init is not implemented yet")
 }
 
 fn rpc_call(config: &LoadedConfig, request: Rpc) -> Result<RpcResult> {
@@ -245,6 +281,7 @@ fn run(config: &LoadedConfig, command: CliCommand) -> Result<()> {
         CliCommand::Bringdown => bringdown(config),
         CliCommand::CfgPull => cfgpull(config),
         CliCommand::CfgPush => cfgpush(config),
+        CliCommand::Init { force } => init(config, force),
         CliCommand::InstallFromRepo => install_from_repo(config),
         CliCommand::SummaryPid { pid } => match rpc_call(config, Rpc::GetSummaryPid { pid })? {
             RpcResult::GetSummary(summary) => {

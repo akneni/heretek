@@ -14,6 +14,9 @@ pub enum CliCommand {
     Bringdown,
     CfgPull,
     CfgPush,
+    Init {
+        force: bool,
+    },
     InstallFromRepo,
     SummaryPid {
         pid: i32,
@@ -63,6 +66,16 @@ pub fn command() -> ClapCommand {
         .subcommand(
             ClapCommand::new("cfgpush")
                 .about("Install config.json and ACL.json from the current directory"),
+        )
+        .subcommand(
+            ClapCommand::new("init")
+                .about("Initialize Heretek config and data directories")
+                .arg(
+                    Arg::new("force")
+                        .long("force")
+                        .action(ArgAction::SetTrue)
+                        .help("Reinitialize existing Heretek directories"),
+                ),
         )
         .subcommand(
             ClapCommand::new("install-from-repo")
@@ -153,6 +166,9 @@ impl CliCommand {
             Some(("down", _)) => Self::Bringdown,
             Some(("cfgpull", _)) => Self::CfgPull,
             Some(("cfgpush", _)) => Self::CfgPush,
+            Some(("init", sub_matches)) => Self::Init {
+                force: sub_matches.get_flag("force"),
+            },
             Some(("install-from-repo", _)) => Self::InstallFromRepo,
             Some(("debug-action", _)) => Self::DebugAction,
             Some(("summary", sub_matches)) => {
@@ -238,6 +254,22 @@ mod tests {
     #[test]
     fn parses_cfgpush() {
         assert_eq!(parse_from(["htek", "cfgpush"]), CliCommand::CfgPush);
+    }
+
+    #[test]
+    fn parses_init() {
+        assert_eq!(
+            parse_from(["htek", "init"]),
+            CliCommand::Init { force: false }
+        );
+    }
+
+    #[test]
+    fn parses_init_force() {
+        assert_eq!(
+            parse_from(["htek", "init", "--force"]),
+            CliCommand::Init { force: true }
+        );
     }
 
     #[test]

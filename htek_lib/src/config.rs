@@ -5,13 +5,18 @@ use std::{
 };
 
 use anyhow::{Context, Result, bail};
-pub use directories::ProjectDirs;
 use serde::{Deserialize, Serialize};
 
+/// A file with this name is put in the config directory
+/// If the config directory exists without this file being present, we assume that the
+/// name "heretek" collides with another application already installed on the system.
+const HTEK_MAGIC_STR: &str = "X2fQ147uQnwXTcch9i";
+
+pub const CONFIG_JSON: &str = include_str!("../../documentation/docs_usr/config.json");
+pub const ACL_JSON: &str = include_str!("../../documentation/docs_usr/ACL.json");
+
 #[derive(Debug, Clone)]
-pub struct HtekDirs {
-    dirs: ProjectDirs,
-}
+pub struct HtekDirs;
 
 #[derive(Debug)]
 pub struct LoadedConfig {
@@ -50,44 +55,46 @@ impl Default for ConfigFile {
 }
 
 impl HtekDirs {
+    const CFG_DIR: &str = "/root/.config/heretek/";
+    const DATA_DIR: &str = "/root/.local/share/heretek/";
+
     pub fn config_dir(&self) -> &Path {
-        self.dirs.config_dir()
+        Path::new(Self::CFG_DIR)
     }
 
     pub fn data_dir(&self) -> &Path {
-        self.dirs.data_dir()
+        Path::new(Self::DATA_DIR)
+    }
+
+    pub fn config_path(&self) -> PathBuf {
+        self.config_dir().join("config.json")
+    }
+
+    pub fn acl_path(&self) -> PathBuf {
+        self.config_dir().join("ACL.json")
     }
 
     /// Returns the pack to the Unix Domain Socket
-    /// Creates its parent directory if it doesnt already exist
-    pub fn socket_path(&self) -> Result<PathBuf> {
-        fs::create_dir_all(self.data_dir())?;
-        Ok(self.data_dir().join("RPC-root.sock"))
+    pub fn socket_path(&self) -> PathBuf {
+        self.data_dir().join("RPC-root.sock")
     }
 
     /// Returns the path to the directory that sould contain the eBPF objects
-    pub fn bpf_obj_path(&self) -> Result<PathBuf> {
+    pub fn bpf_obj_path(&self) -> PathBuf {
         let bpf_dir = self.data_dir().join("bpf_objects");
-        fs::create_dir_all(&bpf_dir)?;
-        Ok(bpf_dir)
+        bpf_dir
     }
 
-    pub fn violation_log_path(&self) -> Result<PathBuf> {
-        let data_dir = self.data_dir();
-        if !data_dir.exists() {
-            fs::create_dir_all(data_dir)?;
-        }
-
-        Ok(data_dir.join("violations.log"))
+    pub fn violation_log_path(&self) -> PathBuf {
+        self.data_dir().join("violations.log")
     }
 
-    pub fn tracefile_path(&self) -> Result<PathBuf> {
-        let data_dir = self.data_dir();
-        if !data_dir.exists() {
-            fs::create_dir_all(data_dir)?;
-        }
+    pub fn tracefile_path(&self) -> PathBuf {
+        self.data_dir().join("daemon_traces.log")
+    }
 
-        Ok(data_dir.join("daemon_traces.log"))
+    pub fn htek_magic_file_path(&self) -> PathBuf {
+        self.config_dir().join(HTEK_MAGIC_STR)
     }
 }
 
@@ -95,12 +102,9 @@ impl LoadedConfig {
     pub fn load() -> Result<Self> {
         validate_environment()?;
 
-        let dirs = ProjectDirs::from("com", "heretek", "heretek")
-            .context("No valid home directory could be found")?;
-        let hdirs = HtekDirs { dirs };
-        fs::create_dir_all(hdirs.config_dir())?;
+        let hdirs = HtekDirs;
 
-        let config_path = hdirs.config_dir().join("config.json");
+        let config_path = hdirs.config_path();
         if !config_path.exists() {
             fs::write(
                 &config_path,
@@ -111,16 +115,42 @@ impl LoadedConfig {
         let file = serde_json::from_str(&fs::read_to_string(config_path)?)
             .context("Failed to parse ConfigFile")?;
 
-        Ok(LoadedConfig { dirs: hdirs, file })
+        Ok(LoadedConfig {
+            dirs: HtekDirs,
+            file,
+        })
     }
 }
 
 pub fn validate_environment() -> Result<()> {
-    if "root" != whoami::account()? {
-        bail!("Heretek needs to be run as root");
-    }
     if whoami::platform() != whoami::Platform::Linux {
         bail!("Unsupported platform; Heretek currently supports Linux");
     }
+
+    let mfile = HtekDirs.htek_magic_file_path();
+    if !mfile.exists() {
+        if whoami::account()? != "root" {
+            bail!(
+                "The heretek directoies don't seem to be initalized. Please run `sudo htek init`"
+            );
+        }
+
+        if HtekDirs.config_dir().exists() || HtekDirs.data_dir().exists() {
+            bail!("Htek Directories found without magic file. Possible application name clash?");
+        }
+
+        fs::create_dir_all(HtekDirs.config_dir())?;
+        fs::create_dir_all(HtekDirs.data_dir())?;
+        fs::create_dir_all(HtekDirs.bpf_obj_path())?;
+
+        fs::write(HtekDirs.config_path(), CONFIG_JSON)?;
+        fs::write(HtekDirs.acl_path(), ACL_JSON)?;
+
+        fs::write(
+            mfile,
+            "This file prevents collitions on the name heretek. Ignore it but dont delete it.",
+        )?;
+    }
+
     Ok(())
 }

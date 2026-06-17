@@ -13,8 +13,8 @@ pub use trcing::*;
 /// Currently, this operates on the violations log and the trace file
 pub fn prep_logs(config: &Config) -> Result<()> {
     let files = [
-        config.dirs.violation_log_path()?,
-        config.dirs.tracefile_path()?,
+        config.dirs.violation_log_path(),
+        config.dirs.tracefile_path(),
     ];
 
     for f in files {

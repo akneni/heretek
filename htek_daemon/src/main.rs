@@ -25,7 +25,7 @@ mod utils;
 
 fn preflight() -> Result<Config> {
     let loaded = htek_lib::config::LoadedConfig::load()?;
-    let acl_path = loaded.dirs.config_dir().join("ACL.json");
+    let acl_path = loaded.dirs.acl_path();
     let acl = Acl::from_acl_file(&acl_path).context("Failed to parse ACL")?;
 
     Ok(Config::from(loaded, acl))
@@ -34,7 +34,7 @@ fn preflight() -> Result<Config> {
 fn daemon_init(config: &Config) -> Result<(UnixListener, BpfEventArrayReader)> {
     uinterf::prep_logs(config).context("Failed to prepare the logfiles")?;
 
-    let trc_path = config.dirs.tracefile_path()?;
+    let trc_path = config.dirs.tracefile_path();
     let trc_fp = File::options().create(true).write(true).open(&trc_path)?;
 
     tracing_subscriber::registry()
