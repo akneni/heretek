@@ -8,6 +8,9 @@ use anyhow::{Result, bail};
 
 use crate::cli::SpawnMode;
 
+pub const CONFIG_JSON: &str = include_str!("../../documentation/docs_usr/config.json");
+pub const ACL_JSON: &str = include_str!("../../documentation/docs_usr/ACL.json");
+
 /// Spawns a command.
 pub fn spawn_cmd(command: Vec<OsString>, mode: SpawnMode) -> Result<()> {
     let (program, args) = command
@@ -50,4 +53,22 @@ pub fn spawn_cmd(command: Vec<OsString>, mode: SpawnMode) -> Result<()> {
             bail!("Spawned command exited without an exit code")
         }
     }
+}
+
+/// Gets the current user if we're not running as root.
+/// Gets the user that spawned us with `sudo` (or simmilar) if we are running as root.
+/// If we are root and no one spawned us with `sudo`, return an error
+pub fn get_nonroot_user() -> Result<String> {
+    let user = whoami::account()?;
+    if user != "root" {
+        return Ok(user);
+    }
+
+    let sudo_user = std::env::var("SUDO_USER")
+        .map_err(|_| anyhow::anyhow!("Cannot determine non-root user: SUDO_USER is not set"))?;
+    if sudo_user == "root" || sudo_user.is_empty() {
+        bail!("Cannot determine non-root user");
+    }
+
+    Ok(sudo_user)
 }

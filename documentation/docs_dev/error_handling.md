@@ -18,9 +18,9 @@
   `println!()`, `std::process::exit()` or any other operation that can panic/exit. 
 - In terms of notifying the user of errors/warnings, the daemon should use the macros provided 
   by the tracing crate.
-  - `ERROR` -> For errors that causes the daemon to exit
-  - `WARN` -> For errors that don't cause the daemon to exit
-  - `INFO` -> All other info (like performanst stats)
+  - `ERROR` -> For unexpected issues.
+  - `WARN` -> For expected issues (events dropped from BPF map, performance issues under load, etc)
+  - `INFO` -> All other info (like performance stats)
   - `TRACE` -> Unused
   - `Debug` -> Unused
 - In assert contexts, daemon code may also use incident files. 

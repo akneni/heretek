@@ -18,7 +18,7 @@ pub enum Rpc {
     GetSummaryPid { pid: i32 },
     GetSummaryExe { exe_path: String },
     SetProfile { profile: String, pid: i32 },
-    Bringdown { unload_bpf: bool },
+    Bringdown,
     SetChildProfile { pid: i32, profiles: HashSet<String> },
     Touched { file: PathBuf },
     DebugAction,
@@ -28,7 +28,6 @@ pub enum Rpc {
 pub enum RpcResult {
     GetSummary(String),
     SetProfileRes { msg: String, success: bool },
-    BringdownRes(String),
     SetChildProfileRes { msg: String, success: bool },
     TouchedRes(String),
     DebugActionRes(String),

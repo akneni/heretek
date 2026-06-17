@@ -10,10 +10,10 @@ pub use event::*;
 pub use pgraph::*;
 
 use crate::bpf::{CEvent, event_types};
-use crate::build_params;
 use crate::detection::PolicyVerdict;
 use crate::response::handle_response;
 use crate::uinterf::Config;
+use crate::{build_params, utils};
 
 /// This is the bulk of this program.
 /// It updates the Pgraph with the events and detects any violations
@@ -24,8 +24,8 @@ pub fn handle_event(config: &Config, pgraph: &mut PGraph, cevent: &CEvent) -> Re
             let creator_pid = match event.args {
                 EventArgs::Start { creator_pid } => creator_pid,
                 _ => {
-                    // TODO: make an ASSERTS aware-unreachable macro.
-                    unreachable!();
+                    utils::unreachable();
+                    return Ok(());
                 }
             };
 
@@ -72,7 +72,7 @@ fn handle_simple_event(config: &Config, pgraph: &mut PGraph, cevent: &CEvent) {
         match Event::from_resolve(cevent, &node.actor) {
             Ok(r) => r,
             Err(e) => {
-                eprintln!("Error parsing CEvent: {e}");
+                tracing::error!("Error parsing CEvent: {e}");
                 return;
             }
         }

@@ -1,6 +1,15 @@
-use std::{collections::HashSet, ffi::OsString, fs, path::Path, process};
+use std::{
+    collections::HashSet,
+    ffi::OsString,
+    fs,
+    io::{self, Write},
+    path::Path,
+    process::{self, Stdio},
+    thread,
+    time::Duration,
+};
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result, anyhow, bail};
 use htek_lib::{
     config::LoadedConfig,
     rpc::{self, Rpc, RpcResult, StreamSendable},
@@ -8,39 +17,89 @@ use htek_lib::{
 
 use crate::{
     cli::{CliCommand, SpawnMode},
-    utils::spawn_cmd,
+    utils::{ACL_JSON, CONFIG_JSON, get_nonroot_user, spawn_cmd},
 };
 
 mod cli;
 mod utils;
 
-fn bringup(_config: &LoadedConfig) -> Result<()> {
-    // rpc::check_not_running(&config.dirs)?;
-    // println!("Loading eBPF objects");
-    // bpf::load(config)?;
+fn bringup(config: &LoadedConfig) -> Result<()> {
+    if let Ok(_) = rpc::try_connect(&config.dirs) {
+        eprintln!("heretek daemon seems to already be running!");
+        return Ok(());
+    }
 
-    // println!("Spawning Heretek daemon");
-    // process::Command::new("htekd")
-    //     .stdin(Stdio::null())
-    //     .stdout(Stdio::null())
-    //     .stderr(Stdio::null())
-    //     .spawn()
-    //     .context("Failed to spawn htekd")?;
-    // println!("Spawned daemon successfully");
+    println!("Spawning Heretek daemon...");
+    process::Command::new("htekd")
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .context("Failed to spawn htekd")?;
+
+    let mut sleep_ms = 75;
+    for _i in 0..4 {
+        match rpc::try_connect(&config.dirs) {
+            Ok(_) => {
+                println!("Spawned daemon successfully");
+                return Ok(());
+            }
+            Err(_) => {
+                thread::sleep(Duration::from_millis(sleep_ms));
+                sleep_ms *= 2;
+            }
+        }
+    }
+
+    eprintln!("Time out exceeded. Daemon spawned but has since crashed or is unresponsive.");
+    print_daemon_traces(config)?;
+
     Ok(())
 }
 
-fn bringdown(_config: &LoadedConfig) -> Result<()> {
-    // match rpc::try_connect(&config.dirs) {
-    //     Ok(stream) => {
-    //         Rpc::Bringdown { unload_bpf: false }.try_stream_send(&stream)?;
-    //         let _ = RpcResult::try_stream_recv(&stream);
-    //         println!("Heretek daemon exited");
-    //     }
-    //     Err(_) => println!("Heretek daemon is not running"),
-    // }
+fn bringdown(config: &LoadedConfig) -> Result<()> {
+    let mut sleep_ms = 75;
+    for i in 0..4 {
+        match rpc::try_connect(&config.dirs) {
+            Ok(stream) => {
+                Rpc::Bringdown.try_stream_send(&stream)?;
+            }
+            Err(_) => {
+                if i == 0 {
+                    println!("Heretek daemon is not running");
+                } else {
+                    println!("Heretek daemon shut down successfully!");
+                }
+                return Ok(());
+            }
+        }
 
-    // bpf::unload(config)
+        thread::sleep(Duration::from_millis(sleep_ms));
+        sleep_ms *= 2;
+    }
+
+    eprintln!("Time out exceeded, daemon doesn't seem to be shutting down");
+    process::exit(1);
+}
+
+fn print_daemon_traces(config: &LoadedConfig) -> Result<()> {
+    let traces = match fs::read(config.dirs.tracefile_path()?) {
+        Ok(r) => r,
+        Err(_) => {
+            println!("Daemon tracefile doesn't exist!");
+            return Ok(());
+        }
+    };
+
+    if traces.is_empty() {
+        eprintln!("Daemon's trace file is empty");
+        return Ok(());
+    }
+
+    eprintln!("Daemon Traces:");
+    let mut lk = io::stdout().lock();
+    lk.write_all(&traces)?;
+
     Ok(())
 }
 
@@ -100,6 +159,46 @@ fn install_from_repo(config: &LoadedConfig) -> Result<()> {
     Ok(())
 }
 
+fn cfgpull(_config: &LoadedConfig) -> Result<()> {
+    let cgf_files = [
+        (Path::new("/root/.config/heretek/ACL.json"), ACL_JSON),
+        (Path::new("/root/.config/heretek/config.json"), CONFIG_JSON),
+    ];
+    for (fpath_hcfg, default) in cgf_files {
+        let fname = fpath_hcfg
+            .file_name()
+            .ok_or(anyhow!("failed to get filename"))?
+            .to_str()
+            .ok_or(anyhow!("failed to get filename"))?;
+
+        if fpath_hcfg.exists() {
+            fs::copy(fpath_hcfg, fname)?;
+        } else {
+            fs::write(fname, default)?;
+        }
+
+        let fpath_cwd = Path::new(fname);
+        let output = process::Command::new("chown")
+            .arg(get_nonroot_user()?)
+            .arg(fpath_cwd)
+            .output()?;
+        if !output.status.success() {
+            bail!(
+                "failed to chown {}: {}",
+                fpath_cwd.display(),
+                String::from_utf8_lossy(&output.stderr)
+            );
+        }
+    }
+    Ok(())
+}
+
+/// Pushes config.json and ACL.json from the current directory the heretek config directory
+/// Skips over either of these files if they don't exist in the current directory.
+fn cfgpush(_config: &LoadedConfig) -> Result<()> {
+    bail!("cfgpush is not implemented yet")
+}
+
 fn rpc_call(config: &LoadedConfig, request: Rpc) -> Result<RpcResult> {
     let stream = rpc::try_connect(&config.dirs).context("Heretek daemon is not running")?;
     request.try_stream_send(&stream)?;
@@ -144,6 +243,8 @@ fn run(config: &LoadedConfig, command: CliCommand) -> Result<()> {
     match command {
         CliCommand::Bringup => bringup(config),
         CliCommand::Bringdown => bringdown(config),
+        CliCommand::CfgPull => cfgpull(config),
+        CliCommand::CfgPush => cfgpush(config),
         CliCommand::InstallFromRepo => install_from_repo(config),
         CliCommand::SummaryPid { pid } => match rpc_call(config, Rpc::GetSummaryPid { pid })? {
             RpcResult::GetSummary(summary) => {

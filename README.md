@@ -1,13 +1,30 @@
 # Heretek
 - Heretek is a endpoint detection and response (EDR) solution for linux. It's primarily targeted towards desktop linux. 
 
+## About
+
+## Install && Setup
+- In order to build from source, do the following. 
+```bash 
+git clone https://github.com/akneni/heretek.git
+cd heretek 
+sudo make install_deps
+make build
+sudo make install
+```
+- Providing prebuild binaries (and publishing to each distro's package manager) is still a WIP.
+
+## Usage
+- To start the service, run the following. 
+```
+sudo htek up
+```
+
+
+
 ## Architecture
 - The core part of this is an ebpf program that pushed relevant syscalls to a per CPU ring buffer. 
 - The second half of this is a user space daemon that will drain these buffers and analyze the raw data to detect malicious processes. 
-
-
-
-
 
 ## Userspace Layout
 - `htek_cli` builds the `htek` command-line client.

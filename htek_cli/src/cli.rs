@@ -12,6 +12,8 @@ pub enum SpawnMode {
 pub enum CliCommand {
     Bringup,
     Bringdown,
+    CfgPull,
+    CfgPush,
     InstallFromRepo,
     SummaryPid {
         pid: i32,
@@ -54,6 +56,14 @@ pub fn command() -> ClapCommand {
         .arg_required_else_help(true)
         .subcommand(ClapCommand::new("up").about("Bring up the Heretek daemon"))
         .subcommand(ClapCommand::new("down").about("Bring down the Heretek daemon"))
+        .subcommand(
+            ClapCommand::new("cfgpull")
+                .about("Write config.json and ACL.json to the current directory"),
+        )
+        .subcommand(
+            ClapCommand::new("cfgpush")
+                .about("Install config.json and ACL.json from the current directory"),
+        )
         .subcommand(
             ClapCommand::new("install-from-repo")
                 .about("Install Heretek from the current repository"),
@@ -141,6 +151,8 @@ impl CliCommand {
         match matches.subcommand() {
             Some(("up", _)) => Self::Bringup,
             Some(("down", _)) => Self::Bringdown,
+            Some(("cfgpull", _)) => Self::CfgPull,
+            Some(("cfgpush", _)) => Self::CfgPush,
             Some(("install-from-repo", _)) => Self::InstallFromRepo,
             Some(("debug-action", _)) => Self::DebugAction,
             Some(("summary", sub_matches)) => {
@@ -216,6 +228,16 @@ mod tests {
             parse_from(["htek", "install-from-repo"]),
             CliCommand::InstallFromRepo
         );
+    }
+
+    #[test]
+    fn parses_cfgpull() {
+        assert_eq!(parse_from(["htek", "cfgpull"]), CliCommand::CfgPull);
+    }
+
+    #[test]
+    fn parses_cfgpush() {
+        assert_eq!(parse_from(["htek", "cfgpush"]), CliCommand::CfgPush);
     }
 
     #[test]

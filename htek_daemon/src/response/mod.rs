@@ -1,6 +1,6 @@
 use std::{
     collections::HashSet,
-    fs::{self, File},
+    fs::File,
     io::{self, Seek, Write as IoWrite},
 };
 
@@ -93,7 +93,7 @@ pub fn handle_response(config: &Config, pgraph_db: &PGraph, violations: &[Policy
                 &violating_tuids,
             )
         {
-            eprintln!("failed to write to alert log: {e}");
+            tracing::error!("failed to write to alert log: {e}");
         }
         if config.quarentine.contains(&"notify".to_string()) {
             notify(node);
@@ -102,29 +102,6 @@ pub fn handle_response(config: &Config, pgraph_db: &PGraph, violations: &[Policy
             terminate(config, pgraph_db, node);
         }
     }
-}
-
-/// Moves everything in alerts.log to alerts_bak.log and ensures that alerts.log is empty and ready for this run.
-pub fn init_alert_log(config: &Config) -> Result<()> {
-    let alert_log = config.dirs.data_dir().join("alerts.log");
-    let mut alert_bak = alert_log.clone();
-    alert_bak.pop();
-    alert_bak.push("alerts_bak.log");
-
-    if alert_log.exists() {
-        let alets = fs::read_to_string(&alert_log)?;
-
-        let mut fp = File::options().create(true).append(true).open(&alert_bak)?;
-
-        fp.write_all(alets.as_bytes())?;
-        fp.write_all(b"\n\n")?;
-        drop(fp);
-
-        fs::remove_file(&alert_log)?;
-        fs::write(&alert_log, "")?;
-    }
-
-    Ok(())
 }
 
 fn log(
@@ -301,6 +278,6 @@ fn notify(node: &PGraphNode) {
         .show();
 
     if let Err(e) = res {
-        eprintln!("Failed to send notification: {}", e);
+        tracing::error!("Failed to send notification: {}", e);
     }
 }

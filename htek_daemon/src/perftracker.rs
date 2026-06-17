@@ -55,7 +55,7 @@ impl PerfTracker {
         if !build_params::PERF_TRACKING {
             return;
         }
-        println!(
+        tracing::info!(
             "(Avg Time {:?}) (Max Time = {:?}) (Avg Events {}) (Max Events {})",
             Duration::from_micros(self.total_time_elapsed / self.total_iterations),
             Duration::from_micros(self.max_time_elapsed),

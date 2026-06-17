@@ -1,0 +1,28 @@
+{
+  "hardened": {
+    "rules": {
+      "/home/*/.ssh/**": "-----",
+
+      "/usr/bin/**": "r-x--",
+      "/usr/sbin/**": "r-x--",
+      "/usr/local/bin/**": "r-x--",
+
+      "/usr/lib/**": "r-x--",
+      "/usr/lib64/**": "r-x--",
+      "/lib/**": "r-x--",
+      "/lib64/**": "r-x--",
+
+      "/etc/resolv.conf": "r----",
+      "/etc/hosts": "r----",
+      "/etc/nsswitch.conf": "r----",
+      "/etc/passwd": "r----",
+      "/etc/group": "r----",
+
+      "/home/*/.config/**": "rw-bc",
+      "/home/*/.cache/**": "rw-bc",
+      "/home/*/.local/share/**": "rw-bc",
+
+      "/root/.config/heretek/**": "r--c-"
+    }
+  }
+}

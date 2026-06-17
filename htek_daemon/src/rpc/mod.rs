@@ -1,6 +1,6 @@
-use std::{fmt::Write, os::unix::net::UnixListener, path::PathBuf, process};
+use std::{fmt::Write, os::unix::net::UnixListener, path::PathBuf};
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result, anyhow, bail};
 pub use htek_lib::rpc::{Rpc, RpcResult, StreamSendable};
 
 use crate::{
@@ -72,13 +72,22 @@ pub fn handle_rpc(config: &Config, pgraph_db: &mut PGraph, socket: &UnixListener
             res.try_stream_send(&mut stream)?;
         }
         Rpc::SetChildProfile { pid, profiles } => {
-            todo!("TODO");
-        }
-        Rpc::Bringdown { unload_bpf } => {
-            if unload_bpf {
-                eprintln!("Unloading BPF is not yet implemented");
+            let node = pgraph_db
+                .get_latest_mut(pid)
+                .ok_or(anyhow!("Process with PID {} not found", pid))?;
+            for p in profiles.iter() {
+                node.actor.actor_md.child_profile.insert(p.clone());
             }
-            process::exit(0);
+
+            let res = RpcResult::SetChildProfileRes {
+                msg: "".to_string(),
+                success: true,
+            };
+            res.try_stream_send(&mut stream)?;
+        }
+        Rpc::Bringdown => {
+            tracing::info!("Received shutdown request. Exiting cleanly.");
+            utils::clean_shutdown(config)?;
         }
         Rpc::Touched { file } => {
             let res = handle_touched(pgraph_db, file);

@@ -98,7 +98,7 @@ impl BpfEventArrayReader {
         for (cpu, head) in heads.into_iter().enumerate() {
             if head.saturating_sub(self.tails[cpu]) > EVENT_BUFFER_SLOTS {
                 let dropped = head - self.tails[cpu] - EVENT_BUFFER_SLOTS;
-                eprintln!("dropped {dropped} event(s) on CPU {cpu}");
+                tracing::warn!("dropped {dropped} event(s) on CPU {cpu}");
                 self.tails[cpu] = head - EVENT_BUFFER_SLOTS;
             }
 

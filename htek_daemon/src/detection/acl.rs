@@ -144,7 +144,7 @@ impl Acl {
                 Some(r) => r,
                 None => {
                     if prof != "unchained" {
-                        eprintln!("Process has a profile that doesn't exist: {}", prof);
+                        tracing::error!("Process has a profile that doesn't exist: {}", prof);
                     }
                     continue;
                 }

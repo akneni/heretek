@@ -32,9 +32,9 @@ fn preflight() -> Result<Config> {
 }
 
 fn daemon_init(config: &Config) -> Result<(UnixListener, BpfEventArrayReader)> {
-    response::init_alert_log(config).context("Failed to initalize the alert/violation log")?;
+    uinterf::prep_logs(config).context("Failed to prepare the logfiles")?;
 
-    let trc_path = config.dirs.data_dir().join("traces.log");
+    let trc_path = config.dirs.tracefile_path()?;
     let trc_fp = File::options().create(true).write(true).open(&trc_path)?;
 
     tracing_subscriber::registry()
@@ -42,8 +42,8 @@ fn daemon_init(config: &Config) -> Result<(UnixListener, BpfEventArrayReader)> {
         .with(tracing_subscriber::fmt::layer().with_writer(trc_fp))
         .init();
 
-    let socket = htek_lib::rpc::try_create_listener(&config.dirs)?;
-    socket.set_nonblocking(true)?;
+    bpf::unload_all_bpf_obj(config)?;
+    bpf::load_bpf_obj(config)?;
 
     let bpf_reader = bpf::BpfEventArrayReader::from_pinned_path("/sys/fs/bpf/heretek-maps/events");
     let bpf_reader = match bpf_reader {
@@ -57,6 +57,9 @@ fn daemon_init(config: &Config) -> Result<(UnixListener, BpfEventArrayReader)> {
             }
         }
     };
+
+    let socket = htek_lib::rpc::try_create_listener(&config.dirs)?;
+    socket.set_nonblocking(true)?;
 
     Ok((socket, bpf_reader))
 }

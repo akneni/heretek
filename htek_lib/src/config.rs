@@ -36,9 +36,7 @@ impl Default for ConfigFile {
     fn default() -> Self {
         let mut profiles = HashMap::new();
         profiles.insert("unchained".to_string(), vec![]);
-        profiles.insert("resonable".to_string(), vec![]);
-        profiles.insert("resonable-nogui".to_string(), vec![]);
-        profiles.insert("hardened".to_string(), vec!["/usr/bin/npm".to_string()]);
+        profiles.insert("hardened".to_string(), vec![]);
 
         Self {
             profile_config: ProfileConfigFile {
@@ -64,7 +62,7 @@ impl HtekDirs {
     /// Creates its parent directory if it doesnt already exist
     pub fn socket_path(&self) -> Result<PathBuf> {
         fs::create_dir_all(self.data_dir())?;
-        Ok(self.data_dir().join("RPC.sock"))
+        Ok(self.data_dir().join("RPC-root.sock"))
     }
 
     /// Returns the path to the directory that sould contain the eBPF objects
@@ -72,6 +70,24 @@ impl HtekDirs {
         let bpf_dir = self.data_dir().join("bpf_objects");
         fs::create_dir_all(&bpf_dir)?;
         Ok(bpf_dir)
+    }
+
+    pub fn violation_log_path(&self) -> Result<PathBuf> {
+        let data_dir = self.data_dir();
+        if !data_dir.exists() {
+            fs::create_dir_all(data_dir)?;
+        }
+
+        Ok(data_dir.join("violations.log"))
+    }
+
+    pub fn tracefile_path(&self) -> Result<PathBuf> {
+        let data_dir = self.data_dir();
+        if !data_dir.exists() {
+            fs::create_dir_all(data_dir)?;
+        }
+
+        Ok(data_dir.join("daemon_traces.log"))
     }
 }
 

@@ -1,0 +1,36 @@
+{
+  "profile_config": {
+    "default": "hardened",
+    "profiles": {
+      "unchained": [
+        "/usr/bin/pacman",
+        "/usr/lib/systemd/systemd",
+        "/usr/bin/ghostty",
+        "/usr/lib/systemd/systemd-resolved",
+        "/usr/lib/systemd/systemd-userdbd",
+        "/usr/bin/NetworkManager",
+        "/usr/bin/dbus-broker",
+        "/usr/lib/systemd/systemd-timesyncd",
+        "/usr/bin/dbus-broker-launch",
+        "/usr/bin/ananicy-cpp",
+        "/usr/bin/avahi-daemon",
+        "/usr/lib/systemd/systemd",
+        "/usr/bin/scx_loader",
+        "/usr/lib/polkit-1/polkitd",
+        "/usr/bin/scx_bpfland",
+        "/usr/bin/udevadm",
+        "/usr/lib/systemd/systemd-journald",
+        "/usr/lib/bluetooth/bluetoothd",
+        "/usr/lib/systemd/systemd-logind",
+        "/usr/bin/htek",
+        "/usr/bin/htekd",
+        "/usr/bin/ssh",
+        "/usr/bin/sh",
+        "/usr/bin/bash",
+        "/usr/bin/fish"
+      ],
+      "hardened": []
+    }
+  },
+  "quarentine": ["log"]
+}

@@ -7,7 +7,9 @@ use std::time::Instant;
 use crate::pgraph::PGraph;
 use crate::uinterf::Config;
 
-/// This file
+/// Typically, the tracing crate is used for errors. For more complex things (like when we
+/// detect a broken invarient in PGraph), this structure is used to create a file that we can
+/// dump our state into to help us debug it easier.
 pub struct IncFile {
     fp: File,
     timer: Instant,
@@ -77,39 +79,36 @@ impl Drop for IncFile {
     }
 }
 
-/// Generates an incident file if ASSERTS is true. Otherwise, just prints the incident msg to stderr.
+/// Convienent oneliner to create and populate an incident file.
+/// Usage:
+///    - `incident!("an error occured", config)`
+///    - `incident!("an error occured", config, pgraph)`
 #[macro_export]
 macro_rules! incident {
     ($desc:expr, $config:expr $(,)?) => {
-        eprintln!("Incident Occured: {}", $desc);
-        if $crate::build_params::ASSERTS {
-            match $crate::uinterf::IncFile::new($config, $desc) {
-                Ok(mut inc_file) => {
-                    if let Err(error) = inc_file.dmp_stacktrace() {
-                        eprintln!("Failed to write incident stack trace: {error}");
-                    }
+        match $crate::uinterf::IncFile::new($config, $desc) {
+            Ok(mut inc_file) => {
+                if let Err(error) = inc_file.dmp_stacktrace() {
+                    tracing::warn!("Failed to write incident stack trace: {error}");
                 }
-                Err(error) => {
-                    eprintln!("Failed to create incident file: {error}");
-                }
+            }
+            Err(error) => {
+                tracing::warn!("Failed to create incident file: {error}");
             }
         }
     };
     ($desc:expr, $config:expr, pgraph = $pgraph:expr $(,)?) => {
-        eprintln!("Incident Occured: {}", $desc);
-        if $crate::build_params::ASSERTS {
-            match $crate::uinterf::IncFile::new($config, $desc) {
-                Ok(mut inc_file) => {
-                    if let Err(error) = inc_file.dmp_stacktrace() {
-                        eprintln!("Failed to write incident stack trace: {error}");
-                    }
-                    if let Err(error) = inc_file.dmp_pgraph($pgraph) {
-                        eprintln!("Failed to write incident process graph: {error}");
-                    }
+        match $crate::uinterf::IncFile::new($config, $desc) {
+            Ok(mut inc_file) => {
+                if let Err(error) = inc_file.dmp_stacktrace() {
+                    tracing::warn!("Failed to write incident stack trace: {error}");
                 }
-                Err(error) => {
-                    eprintln!("Failed to create incident file: {error}");
+                if let Err(error) = inc_file.dmp_pgraph($pgraph) {
+                    tracing::warn!("Failed to write incident process graph: {error}");
                 }
+            }
+            Err(error) => {
+                tracing::warn!("Failed to create incident file: {error}");
             }
         }
     };
