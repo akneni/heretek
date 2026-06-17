@@ -9,7 +9,7 @@ use std::{
 use anyhow::{Result, bail};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 
-use crate::config::HtekDirs;
+use crate::htdirs;
 
 const MAX_RPC_MESSAGE_SIZE: usize = 16 * 1024 * 1024;
 
@@ -66,20 +66,20 @@ pub trait StreamSendable: Sized + Serialize + DeserializeOwned {
 impl StreamSendable for Rpc {}
 impl StreamSendable for RpcResult {}
 
-pub fn try_connect(dirs: &HtekDirs) -> Result<UnixStream> {
-    Ok(UnixStream::connect(dirs.socket_path())?)
+pub fn try_connect() -> Result<UnixStream> {
+    Ok(UnixStream::connect(htdirs::socket_path())?)
 }
 
-pub fn check_not_running(dirs: &HtekDirs) -> Result<()> {
-    let path = dirs.socket_path();
+pub fn check_not_running() -> Result<()> {
+    let path = htdirs::socket_path();
     if path.exists() && UnixStream::connect(path).is_ok() {
         bail!("Heretek daemon is already running");
     }
     Ok(())
 }
 
-pub fn try_create_listener(dirs: &HtekDirs) -> Result<UnixListener> {
-    let path = dirs.socket_path();
+pub fn try_create_listener() -> Result<UnixListener> {
+    let path = htdirs::socket_path();
     if path.exists() {
         if UnixStream::connect(&path).is_ok() {
             bail!("Heretek daemon is already running");

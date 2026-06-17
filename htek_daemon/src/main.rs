@@ -6,6 +6,7 @@ use std::{
 };
 
 use anyhow::{Context, Result, bail};
+use htek_lib::htdirs;
 use tracing_subscriber::prelude::*;
 
 use crate::bpf::BpfEventArrayReader;
@@ -29,7 +30,7 @@ fn preflight() -> Result<Config> {
     }
 
     let loaded = htek_lib::config::LoadedConfig::load()?;
-    let acl_path = loaded.dirs.acl_path();
+    let acl_path = htdirs::acl_path();
     let acl = Acl::from_acl_file(&acl_path).context("Failed to parse ACL")?;
 
     Ok(Config::from(loaded, acl))
@@ -38,7 +39,7 @@ fn preflight() -> Result<Config> {
 fn daemon_init(config: &Config) -> Result<(UnixListener, BpfEventArrayReader)> {
     uinterf::prep_logs(config).context("Failed to prepare the logfiles")?;
 
-    let trc_path = config.dirs.tracefile_path();
+    let trc_path = htdirs::tracefile_path();
     let trc_fp = File::options().create(true).write(true).open(&trc_path)?;
 
     tracing_subscriber::registry()
@@ -62,7 +63,7 @@ fn daemon_init(config: &Config) -> Result<(UnixListener, BpfEventArrayReader)> {
         }
     };
 
-    let socket = htek_lib::rpc::try_create_listener(&config.dirs)?;
+    let socket = htek_lib::rpc::try_create_listener()?;
     socket.set_nonblocking(true)?;
 
     Ok((socket, bpf_reader))
@@ -132,8 +133,8 @@ fn main() {
             ttracker.display_stats();
         }
 
-        pgraph_db.check_unchained_chains_dbgo(&config);
-        pgraph_db.check_cycles_dbgo(&config);
+        pgraph_db.check_unchained_chains_dbgo();
+        pgraph_db.check_cycles_dbgo();
 
         let iter_interval_us = iter_interval.as_micros() as u64;
         if te >= iter_interval_us {

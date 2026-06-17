@@ -280,7 +280,7 @@ impl PGraph {
     /// Checks that all nodes with unchained_chain = true are really unchaned
     /// and checks that the same is true for all it's parents.
     /// This function does nothing and is compiled out in release builds
-    pub fn check_unchained_chains_dbgo(&self, config: &Config) {
+    pub fn check_unchained_chains_dbgo(&self) {
         if !build_params::ASSERTS {
             return;
         }
@@ -342,14 +342,14 @@ impl PGraph {
         }
 
         if !errors.is_empty() {
-            let mut inc_file =
-                match IncFile::new(config, "ASSERTION FAILED [check_unchained_chains_dbgo]") {
-                    Ok(r) => r,
-                    Err(e) => {
-                        tracing::error!("Failed to create incident file: {e}");
-                        process::exit(1);
-                    }
-                };
+            let mut inc_file = match IncFile::new("ASSERTION FAILED [check_unchained_chains_dbgo]")
+            {
+                Ok(r) => r,
+                Err(e) => {
+                    tracing::error!("Failed to create incident file: {e}");
+                    process::exit(1);
+                }
+            };
 
             let _ = inc_file.dmp_stacktrace();
             let _ = inc_file.dmp_debugable("Errors", &errors);
@@ -365,7 +365,7 @@ impl PGraph {
         }
     }
 
-    pub fn check_cycles_dbgo(&self, config: &Config) {
+    pub fn check_cycles_dbgo(&self) {
         if !build_params::ASSERTS {
             return;
         }
@@ -409,14 +409,14 @@ impl PGraph {
         }
 
         if !errors.is_empty() {
-            let mut inc_file =
-                match IncFile::new(config, "ASSERTION FAILED [check_unchained_chains_dbgo]") {
-                    Ok(r) => r,
-                    Err(e) => {
-                        tracing::error!("Failed to create incident file: {e}");
-                        process::exit(1);
-                    }
-                };
+            let mut inc_file = match IncFile::new("ASSERTION FAILED [check_unchained_chains_dbgo]")
+            {
+                Ok(r) => r,
+                Err(e) => {
+                    tracing::error!("Failed to create incident file: {e}");
+                    process::exit(1);
+                }
+            };
 
             let _ = inc_file.dmp_stacktrace();
             let _ = inc_file.dmp_debugable("Errors", &errors);

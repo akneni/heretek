@@ -5,13 +5,13 @@ use std::{
 };
 
 use anyhow::Result;
+use htek_lib::htdirs;
 use notify_rust::Notification;
 use rustix::process::Signal;
 
 use crate::{
     build_params,
     detection::PolicyVerdict,
-    incident,
     pgraph::{ActorTuid, PGraph, PGraphNode},
     uinterf::{Config, IncFile},
 };
@@ -67,12 +67,13 @@ pub fn handle_response(config: &Config, pgraph_db: &PGraph, violations: &[Policy
         let node = match pgraph_db.nodes.get(evil_root) {
             Some(r) => r,
             None => {
+                tracing::error!("Seen violation from a node that doesn't exist");
                 if !build_params::ASSERTS {
                     continue;
                 }
 
                 if let Ok(mut inc_file) =
-                    IncFile::new(config, "Seen violation from a node that doesn't exist")
+                    IncFile::new("Seen violation from a node that doesn't exist")
                 {
                     let _ = inc_file.dmp_stacktrace();
                     let _ = inc_file.dmp_debugable("Violating TUOD", &violating_tuids);
@@ -105,7 +106,7 @@ pub fn handle_response(config: &Config, pgraph_db: &PGraph, violations: &[Policy
 }
 
 fn log(
-    config: &Config,
+    _config: &Config,
     node: &PGraphNode,
     violation: &PolicyVerdict,
     pgraph_db: &PGraph,
@@ -196,7 +197,7 @@ fn log(
             ));
         }
 
-        let alert_path = config.alert_log_path();
+        let alert_path = htdirs::violation_log_path();
         let mut fp = File::options().write(true).create(true).open(&alert_path)?;
 
         fp.seek(io::SeekFrom::End(0))?;
@@ -226,13 +227,13 @@ fn is_descendant_of(pgraph_db: &PGraph, child_tuid: ActorTuid, root_tuid: ActorT
     false
 }
 
-fn terminate(config: &Config, pgraph_db: &PGraph, evil_root: &PGraphNode) {
+fn terminate(_config: &Config, pgraph_db: &PGraph, evil_root: &PGraphNode) {
     let mut to_kill = evil_root.child_tuids.clone();
 
     let pid = match rustix::process::Pid::from_raw(evil_root.actor.id.pid) {
         Some(r) => r,
         None => {
-            incident!("Rustix PID Conversion Failed 1", config);
+            tracing::error!("Rustix PID Conversion Failed: {}", evil_root.to_str(1));
             return;
         }
     };
@@ -253,7 +254,7 @@ fn terminate(config: &Config, pgraph_db: &PGraph, evil_root: &PGraphNode) {
             let pid = match rustix::process::Pid::from_raw(tuid.pid) {
                 Some(r) => r,
                 None => {
-                    incident!("Rustix PID Conversion Failed 2", config);
+                    tracing::error!("Rustix PID Conversion Failed: {}", node.to_str(1));
                     continue;
                 }
             };

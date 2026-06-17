@@ -4,7 +4,7 @@ use std::{
     path::PathBuf,
 };
 
-use htek_lib::config::{HtekDirs, LoadedConfig, ProfileConfigFile};
+use htek_lib::config::{LoadedConfig, ProfileConfigFile};
 
 use crate::{build_params, detection::Acl};
 
@@ -14,7 +14,6 @@ pub struct Config {
     pub profile_config: ProfileConfig,
     pub quarentine: Vec<String>,
     pub acl: Acl,
-    pub dirs: HtekDirs,
 }
 
 /// This struct allows us to determine which profile an actro should be
@@ -31,12 +30,7 @@ impl Config {
             profile_config: ProfileConfig::from(&cfg_file.profile_config),
             quarentine: cfg_file.quarentine,
             acl,
-            dirs: loaded.dirs,
         }
-    }
-
-    pub fn alert_log_path(&self) -> PathBuf {
-        self.dirs.data_dir().join("alerts.log")
     }
 }
 

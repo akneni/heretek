@@ -5,6 +5,7 @@ use std::fs::{self, File};
 use std::io::Write;
 
 use anyhow::{Result, anyhow};
+use htek_lib::htdirs;
 
 pub use config::*;
 pub use trcing::*;
@@ -12,10 +13,8 @@ pub use trcing::*;
 /// Backsup and Empties log files.
 /// Currently, this operates on the violations log and the trace file
 pub fn prep_logs(config: &Config) -> Result<()> {
-    let files = [
-        config.dirs.violation_log_path(),
-        config.dirs.tracefile_path(),
-    ];
+    let _ = config;
+    let files = [htdirs::violation_log_path(), htdirs::tracefile_path()];
 
     for f in files {
         if f.exists() {

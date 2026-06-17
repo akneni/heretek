@@ -5,7 +5,7 @@ use std::io::Write as IoWrite;
 use std::time::Instant;
 
 use crate::pgraph::PGraph;
-use crate::uinterf::Config;
+use htek_lib::htdirs;
 
 /// Typically, the tracing crate is used for errors. For more complex things (like when we
 /// detect a broken invarient in PGraph), this structure is used to create a file that we can
@@ -16,10 +16,10 @@ pub struct IncFile {
 }
 
 impl IncFile {
-    pub fn new(config: &Config, desc: &str) -> Result<Self> {
+    pub fn new(desc: &str) -> Result<Self> {
         let timer = Instant::now();
         let ts = chrono::Utc::now().format("%Y-%m-%dT%H-%M-%SZ").to_string();
-        let inc_path = config.dirs.data_dir().join(format!("{}.incident", ts));
+        let inc_path = htdirs::data_dir().join(format!("{}.incident", ts));
 
         let fp = File::options().create(true).write(true).open(&inc_path)?;
         let mut inc_file = Self { fp, timer };
@@ -81,11 +81,11 @@ impl Drop for IncFile {
 
 /// Convienent oneliner to create and populate an incident file.
 /// Usage:
-///    - `incident!("an error occured", config)`
-///    - `incident!("an error occured", config, pgraph)`
+///    - `incident!("an error occured")`
+///    - `incident!("an error occured", pgraph)`
 #[macro_export]
 macro_rules! incident {
-    ($desc:expr, $config:expr $(,)?) => {
+    ($desc:expr $(,)?) => {
         match $crate::uinterf::IncFile::new($config, $desc) {
             Ok(mut inc_file) => {
                 if let Err(error) = inc_file.dmp_stacktrace() {
@@ -97,7 +97,7 @@ macro_rules! incident {
             }
         }
     };
-    ($desc:expr, $config:expr, pgraph = $pgraph:expr $(,)?) => {
+    ($desc:expr, pgraph = $pgraph:expr $(,)?) => {
         match $crate::uinterf::IncFile::new($config, $desc) {
             Ok(mut inc_file) => {
                 if let Err(error) = inc_file.dmp_stacktrace() {

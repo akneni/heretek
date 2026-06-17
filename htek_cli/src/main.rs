@@ -12,7 +12,8 @@ use std::{
 
 use anyhow::{Context, Result, anyhow, bail};
 use htek_lib::{
-    config::{HtekDirs, LoadedConfig},
+    config::LoadedConfig,
+    htdirs,
     rpc::{self, Rpc, RpcResult, StreamSendable},
 };
 use rustix::process::{Gid, Uid};
@@ -30,7 +31,7 @@ fn bringup(config: &LoadedConfig) -> Result<()> {
         bail!("Requires root privilages");
     }
 
-    if let Ok(_) = rpc::try_connect(&config.dirs) {
+    if let Ok(_) = rpc::try_connect() {
         eprintln!("heretek daemon seems to already be running!");
         return Ok(());
     }
@@ -45,7 +46,7 @@ fn bringup(config: &LoadedConfig) -> Result<()> {
 
     let mut sleep_ms = 75;
     for _i in 0..4 {
-        match rpc::try_connect(&config.dirs) {
+        match rpc::try_connect() {
             Ok(_) => {
                 println!("Spawned daemon successfully");
                 return Ok(());
@@ -63,14 +64,14 @@ fn bringup(config: &LoadedConfig) -> Result<()> {
     Ok(())
 }
 
-fn bringdown(config: &LoadedConfig) -> Result<()> {
+fn bringdown(_config: &LoadedConfig) -> Result<()> {
     if whoami::username()? != "root" {
         bail!("Requires root privilages");
     }
 
     let mut sleep_ms = 75;
     for i in 0..4 {
-        match rpc::try_connect(&config.dirs) {
+        match rpc::try_connect() {
             Ok(stream) => {
                 Rpc::Bringdown.try_stream_send(&stream)?;
             }
@@ -92,8 +93,8 @@ fn bringdown(config: &LoadedConfig) -> Result<()> {
     process::exit(1);
 }
 
-fn print_daemon_traces(config: &LoadedConfig) -> Result<()> {
-    let traces = match fs::read(config.dirs.tracefile_path()) {
+fn print_daemon_traces(_config: &LoadedConfig) -> Result<()> {
+    let traces = match fs::read(htdirs::tracefile_path()) {
         Ok(r) => r,
         Err(_) => {
             println!("Daemon tracefile doesn't exist!");
@@ -114,8 +115,8 @@ fn print_daemon_traces(config: &LoadedConfig) -> Result<()> {
 }
 
 /// Deletes all .ebpf.o files inside of the eBPF object directory
-fn purge_bpf_objects(config: &LoadedConfig) -> Result<()> {
-    let bpf_dir = config.dirs.bpf_obj_path();
+fn purge_bpf_objects(_config: &LoadedConfig) -> Result<()> {
+    let bpf_dir = htdirs::bpf_obj_path();
 
     for entry in
         fs::read_dir(&bpf_dir).with_context(|| format!("Failed to read {}", bpf_dir.display()))?
@@ -151,7 +152,7 @@ fn install_from_repo(config: &LoadedConfig) -> Result<()> {
         }
     }
 
-    let bpf_dir = config.dirs.bpf_obj_path();
+    let bpf_dir = htdirs::bpf_obj_path();
     purge_bpf_objects(config)?;
     for file in build.read_dir()? {
         let file = file?;
@@ -173,10 +174,10 @@ fn install_from_repo(config: &LoadedConfig) -> Result<()> {
     Ok(())
 }
 
-fn cfgpull(config: &LoadedConfig) -> Result<()> {
+fn cfgpull(_config: &LoadedConfig) -> Result<()> {
     let cgf_files = [
-        (config.dirs.acl_path(), htek_lib::config::ACL_JSON),
-        (config.dirs.config_path(), htek_lib::config::CONFIG_JSON),
+        (htdirs::acl_path(), htek_lib::config::ACL_JSON),
+        (htdirs::config_path(), htek_lib::config::CONFIG_JSON),
     ];
 
     let owner = if whoami::account()? == "root" {
@@ -254,9 +255,9 @@ fn init(force: bool) -> Result<()> {
         bail!("Requires root privilages");
     }
 
-    let mfile = HtekDirs.htek_magic_file_path();
-    let cfg_dir = HtekDirs.config_dir();
-    let data_dir = HtekDirs.data_dir();
+    let mfile = htdirs::htek_magic_file_path();
+    let cfg_dir = htdirs::config_dir();
+    let data_dir = htdirs::data_dir();
 
     if !force {
         if !mfile.exists() && (cfg_dir.exists() || data_dir.exists()) {
@@ -278,14 +279,14 @@ fn init(force: bool) -> Result<()> {
     Ok(())
 }
 
-fn rpc_call(config: &LoadedConfig, request: Rpc) -> Result<RpcResult> {
-    let stream = rpc::try_connect(&config.dirs).context("Heretek daemon is not running")?;
+fn rpc_call(_config: &LoadedConfig, request: Rpc) -> Result<RpcResult> {
+    let stream = rpc::try_connect().context("Heretek daemon is not running")?;
     request.try_stream_send(&stream)?;
     RpcResult::try_stream_recv(&stream)
 }
 
 fn spawn_as_profile(
-    config: &LoadedConfig,
+    _config: &LoadedConfig,
     profile: Option<String>,
     mode: Option<SpawnMode>,
     command: Vec<OsString>,
@@ -295,7 +296,7 @@ fn spawn_as_profile(
         let mut profiles = HashSet::new();
         profiles.insert(profile);
 
-        let stream = rpc::try_connect(&config.dirs)?;
+        let stream = rpc::try_connect()?;
 
         let req = rpc::Rpc::SetChildProfile {
             pid: process::id() as i32,

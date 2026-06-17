@@ -2,14 +2,15 @@ use std::io::Write;
 use std::{path::Path, process};
 
 use anyhow::{Result, bail};
+use htek_lib::htdirs;
 
 use crate::uinterf::Config;
 
 /// Loads an eBPF object by its filename.
-pub fn load_bpf_obj(config: &Config) -> Result<()> {
+pub fn load_bpf_obj(_config: &Config) -> Result<()> {
     let obj = "heretek.ebpf.o";
 
-    let bpf_path = config.dirs.bpf_obj_path();
+    let bpf_path = htdirs::bpf_obj_path();
     let obj_path = bpf_path.join(obj);
     if !obj_path.exists() {
         bail!("eBPF object does not exist");
