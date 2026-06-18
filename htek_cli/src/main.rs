@@ -333,11 +333,6 @@ fn spawn_as_profile(
     spawn_cmd(command, mode)
 }
 
-fn rpc_call(_config: &LoadedConfig, request: Rpc) -> Result<RpcResult> {
-    let mut client = RpcClient::new().context("Heretek daemon is not running")?;
-    client.call_rpc_sync(request)
-}
-
 fn run(config: &LoadedConfig, command: CliCommand) -> Result<()> {
     match command {
         CliCommand::Bringup => bringup(config),
@@ -345,15 +340,19 @@ fn run(config: &LoadedConfig, command: CliCommand) -> Result<()> {
         CliCommand::CfgPull => cfgpull(config),
         CliCommand::CfgPush => cfgpush(config),
         CliCommand::InstallFromRepo => unreachable!(),
-        CliCommand::SummaryPid { pid } => match rpc_call(config, Rpc::GetSummaryPid { pid })? {
-            RpcResult::GetSummary(summary) => {
-                println!("{summary}");
-                Ok(())
+        CliCommand::SummaryPid { pid } => {
+            let mut client = RpcClient::new().context("Heretek daemon is not running")?;
+            match client.call_rpc_sync(Rpc::GetSummaryPid { pid })? {
+                RpcResult::GetSummary(summary) => {
+                    println!("{summary}");
+                    Ok(())
+                }
+                _ => bail!("Daemon returned an unexpected response"),
             }
-            _ => bail!("Daemon returned an unexpected response"),
-        },
+        }
         CliCommand::SummaryExe { exe_path } => {
-            match rpc_call(config, Rpc::GetSummaryExe { exe_path })? {
+            let mut client = RpcClient::new().context("Heretek daemon is not running")?;
+            match client.call_rpc_sync(Rpc::GetSummaryExe { exe_path })? {
                 RpcResult::GetSummary(summary) => {
                     println!("{summary}");
                     Ok(())
@@ -362,7 +361,8 @@ fn run(config: &LoadedConfig, command: CliCommand) -> Result<()> {
             }
         }
         CliCommand::SetProfile { profile, pid } => {
-            match rpc_call(config, Rpc::SetProfile { profile, pid })? {
+            let mut client = RpcClient::new().context("Heretek daemon is not running")?;
+            match client.call_rpc_sync(Rpc::SetProfile { profile, pid })? {
                 RpcResult::SetProfileRes { msg, success } => {
                     println!("{msg}");
                     if success {
@@ -384,7 +384,8 @@ fn run(config: &LoadedConfig, command: CliCommand) -> Result<()> {
         }
         CliCommand::Touched { file } => {
             let file = fs::canonicalize(file).context("Failed to resolve file")?;
-            match rpc_call(config, Rpc::Touched { file })? {
+            let mut client = RpcClient::new().context("Heretek daemon is not running")?;
+            match client.call_rpc_sync(Rpc::Touched { file })? {
                 RpcResult::TouchedRes(summary) => {
                     println!("{summary}");
                     Ok(())
@@ -392,13 +393,16 @@ fn run(config: &LoadedConfig, command: CliCommand) -> Result<()> {
                 _ => bail!("Daemon returned an unexpected response"),
             }
         }
-        CliCommand::DebugAction => match rpc_call(config, Rpc::DebugAction)? {
-            RpcResult::DebugActionRes(output) => {
-                println!("{output}");
-                Ok(())
+        CliCommand::DebugAction => {
+            let mut client = RpcClient::new().context("Heretek daemon is not running")?;
+            match client.call_rpc_sync(Rpc::DebugAction)? {
+                RpcResult::DebugActionRes(output) => {
+                    println!("{output}");
+                    Ok(())
+                }
+                _ => bail!("Daemon returned an unexpected response"),
             }
-            _ => bail!("Daemon returned an unexpected response"),
-        },
+        }
     }
 }
 
