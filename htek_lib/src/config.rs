@@ -47,7 +47,7 @@ impl LoadedConfig {
     pub fn load() -> Result<Self> {
         validate_environment()?;
 
-        let config_path = htdirs::config_path();
+        let config_path = htdirs::cfgfile_path();
         if !config_path.exists() {
             fs::write(
                 &config_path,

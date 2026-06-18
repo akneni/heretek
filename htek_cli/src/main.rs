@@ -177,7 +177,7 @@ fn install_from_repo(config: &LoadedConfig) -> Result<()> {
 fn cfgpull(_config: &LoadedConfig) -> Result<()> {
     let cgf_files = [
         (htdirs::acl_path(), htek_lib::config::ACL_JSON),
-        (htdirs::config_path(), htek_lib::config::CONFIG_JSON),
+        (htdirs::cfgfile_path(), htek_lib::config::CONFIG_JSON),
     ];
 
     let owner = if whoami::account()? == "root" {

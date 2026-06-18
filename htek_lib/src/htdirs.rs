@@ -12,20 +12,22 @@ use crate::config::{ACL_JSON, CONFIG_JSON};
 /// If the config directory exists without this file being present, we assume
 /// that the name "heretek" collides with another application already installed
 /// on the system.
-const HTEK_MAGIC_STR: &str = "X2fQ147uQnwXTcch9i";
+const HTEK_MAGIC_STR: &str = ".X2fQ147uQnwXTcch9i";
 
-const CFG_DIR: &str = "/root/.config/heretek/";
-const DATA_DIR: &str = "/root/.local/share/heretek/";
+const DATA_DIR: &str = "/usr/local/bin/heretek";
+const UDS_DIR: &str = "/run/heretek/";
 
-pub fn config_dir() -> &'static Path {
-    Path::new(CFG_DIR)
-}
+// /usr/local/bin/htek
 
 pub fn data_dir() -> &'static Path {
     Path::new(DATA_DIR)
 }
 
-pub fn config_path() -> PathBuf {
+pub fn config_dir() -> PathBuf {
+    data_dir().join("config")
+}
+
+pub fn cfgfile_path() -> PathBuf {
     config_dir().join("config.json")
 }
 
@@ -34,8 +36,12 @@ pub fn acl_path() -> PathBuf {
 }
 
 /// Returns the path to the Unix Domain Socket.
-pub fn socket_path() -> PathBuf {
-    data_dir().join("RPC-root.sock")
+pub fn socket_path_root() -> PathBuf {
+    Path::new(UDS_DIR).join("htek-rpc-root.sock")
+}
+
+pub fn socket_path_any() -> PathBuf {
+    Path::new(UDS_DIR).join("htek-rpc-any.sock")
 }
 
 /// Returns the path to the directory that should contain the eBPF objects.
@@ -52,7 +58,7 @@ pub fn tracefile_path() -> PathBuf {
 }
 
 pub fn htek_magic_file_path() -> PathBuf {
-    config_dir().join(HTEK_MAGIC_STR)
+    data_dir().join(HTEK_MAGIC_STR)
 }
 
 pub fn validate_environment() -> Result<()> {
@@ -78,9 +84,9 @@ pub fn validate_environment() -> Result<()> {
         fs::set_permissions(config_dir(), fs::Permissions::from_mode(0o755))?;
         fs::set_permissions(data_dir(), fs::Permissions::from_mode(0o755))?;
 
-        fs::write(config_path(), CONFIG_JSON)?;
+        fs::write(cfgfile_path(), CONFIG_JSON)?;
         fs::write(acl_path(), ACL_JSON)?;
-        fs::set_permissions(config_path(), fs::Permissions::from_mode(0o644))?;
+        fs::set_permissions(cfgfile_path(), fs::Permissions::from_mode(0o644))?;
 
         fs::write(
             &mfile,

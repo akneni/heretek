@@ -67,11 +67,11 @@ impl StreamSendable for Rpc {}
 impl StreamSendable for RpcResult {}
 
 pub fn try_connect() -> Result<UnixStream> {
-    Ok(UnixStream::connect(htdirs::socket_path())?)
+    Ok(UnixStream::connect(htdirs::socket_path_root())?)
 }
 
 pub fn check_not_running() -> Result<()> {
-    let path = htdirs::socket_path();
+    let path = htdirs::socket_path_root();
     if path.exists() && UnixStream::connect(path).is_ok() {
         bail!("Heretek daemon is already running");
     }
@@ -79,7 +79,7 @@ pub fn check_not_running() -> Result<()> {
 }
 
 pub fn try_create_listener() -> Result<UnixListener> {
-    let path = htdirs::socket_path();
+    let path = htdirs::socket_path_root();
     if path.exists() {
         if UnixStream::connect(&path).is_ok() {
             bail!("Heretek daemon is already running");

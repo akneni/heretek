@@ -33,7 +33,7 @@ pub fn unreachable() {
 pub fn clean_shutdown(config: &Config) -> Result<()> {
     bpf::unload_all_bpf_obj(config)?;
 
-    if let Err(e) = fs::remove_file(htdirs::socket_path()) {
+    if let Err(e) = fs::remove_file(htdirs::socket_path_root()) {
         tracing::warn!("Failed to clean up UDS file on exit: {e}");
     }
 
