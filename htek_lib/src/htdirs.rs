@@ -1,12 +1,6 @@
-use std::{
-    fs,
-    os::unix::fs::PermissionsExt,
-    path::{Path, PathBuf},
-};
+use std::path::{Path, PathBuf};
 
 use anyhow::{Result, bail};
-
-use crate::config::{ACL_JSON, CONFIG_JSON};
 
 /// A file with this name is put in the config directory.
 /// If the config directory exists without this file being present, we assume
@@ -17,10 +11,12 @@ const HTEK_MAGIC_STR: &str = ".X2fQ147uQnwXTcch9i";
 const DATA_DIR: &str = "/usr/local/bin/heretek";
 const UDS_DIR: &str = "/run/heretek/";
 
-// /usr/local/bin/htek
-
 pub fn data_dir() -> &'static Path {
     Path::new(DATA_DIR)
+}
+
+pub fn uds_dir() -> &'static Path {
+    Path::new(UDS_DIR)
 }
 
 pub fn config_dir() -> PathBuf {
@@ -68,31 +64,7 @@ pub fn validate_environment() -> Result<()> {
 
     let mfile = htek_magic_file_path();
     if !mfile.exists() {
-        if whoami::account()? != "root" {
-            bail!(
-                "The heretek directoies don't seem to be initalized. Please run `sudo htek init`"
-            );
-        }
-
-        if config_dir().exists() || data_dir().exists() {
-            bail!("Htek Directories found without magic file. Possible application name clash?");
-        }
-
-        fs::create_dir_all(config_dir())?;
-        fs::create_dir_all(data_dir())?;
-        fs::create_dir_all(bpf_obj_path())?;
-        fs::set_permissions(config_dir(), fs::Permissions::from_mode(0o755))?;
-        fs::set_permissions(data_dir(), fs::Permissions::from_mode(0o755))?;
-
-        fs::write(cfgfile_path(), CONFIG_JSON)?;
-        fs::write(acl_path(), ACL_JSON)?;
-        fs::set_permissions(cfgfile_path(), fs::Permissions::from_mode(0o644))?;
-
-        fs::write(
-            &mfile,
-            "This file prevents collitions on the name heretek. Ignore it but dont delete it.",
-        )?;
-        fs::set_permissions(&mfile, fs::Permissions::from_mode(0o644))?;
+        bail!("Heretek directoried not yet setup");
     }
 
     Ok(())

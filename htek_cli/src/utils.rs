@@ -4,7 +4,7 @@ use std::{
     process::{self, Command, Stdio},
 };
 
-use anyhow::{Result, bail};
+use anyhow::{bail, Result};
 
 use crate::cli::SpawnMode;
 

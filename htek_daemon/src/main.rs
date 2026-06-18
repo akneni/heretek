@@ -1,6 +1,5 @@
 use std::{
     fs::File,
-    os::unix::net::UnixListener,
     process, thread,
     time::{Duration, Instant},
 };
@@ -9,8 +8,8 @@ use anyhow::{Context, Result, bail};
 use htek_lib::htdirs;
 use tracing_subscriber::prelude::*;
 
-use crate::bpf::BpfEventArrayReader;
 use crate::pgraph::PGraph;
+use crate::{bpf::BpfEventArrayReader, rpc::RpcServer};
 use crate::{detection::Acl, uinterf::Config};
 
 mod bpf;
@@ -29,14 +28,14 @@ fn preflight() -> Result<Config> {
         bail!("root privilages required");
     }
 
-    let loaded = htek_lib::config::LoadedConfig::load()?;
+    let loaded = htek_lib::config::LoadedConfig::load().context("Failed to load config")?;
     let acl_path = htdirs::acl_path();
     let acl = Acl::from_acl_file(&acl_path).context("Failed to parse ACL")?;
 
     Ok(Config::from(loaded, acl))
 }
 
-fn daemon_init(config: &Config) -> Result<(UnixListener, BpfEventArrayReader)> {
+fn daemon_init(config: &Config) -> Result<(RpcServer, BpfEventArrayReader)> {
     uinterf::prep_logs(config).context("Failed to prepare the logfiles")?;
 
     let trc_path = htdirs::tracefile_path();
@@ -63,10 +62,9 @@ fn daemon_init(config: &Config) -> Result<(UnixListener, BpfEventArrayReader)> {
         }
     };
 
-    let socket = htek_lib::rpc::try_create_listener()?;
-    socket.set_nonblocking(true)?;
+    let rpc_server = RpcServer::new()?;
 
-    Ok((socket, bpf_reader))
+    Ok((rpc_server, bpf_reader))
 }
 
 fn main() {
@@ -79,7 +77,7 @@ fn main() {
     };
 
     // This is the only area in the code where the daemon is allowed to exit/fail (unless ASSERTS is enabled)
-    let (socket, mut bpf_reader) = match daemon_init(&config) {
+    let (mut rpc_server, mut bpf_reader) = match daemon_init(&config) {
         Ok(r) => r,
         Err(e) => {
             tracing::error!("An error occured while initalizing the daemon: {e}");
@@ -121,8 +119,16 @@ fn main() {
         events = vec![];
 
         // 3) Check for IPC RPCs from CLI invocations of this tool (like `htek desc <pid>`)
-        if let Err(e) = rpc::handle_rpc(&config, &mut pgraph_db, &socket) {
-            tracing::warn!("Error processing RPC: {e}");
+        // if let Err(e) = rpc::handle_rpc(&config, &mut pgraph_db, &socket) {
+        //     tracing::warn!("Error processing RPC: {e}");
+        // }
+
+        let res = rpc_server.handle_rpc(|rpcobj, is_root| {
+            rpc::handle_rpc(&config, &mut pgraph_db, rpcobj, is_root)
+        });
+
+        if let Err(e) = res {
+            tracing::warn!("{e}");
         }
 
         // 4) Sleep for an alloted amount of time.

@@ -1,6 +1,6 @@
 use std::ffi::OsString;
 
-use clap::{Arg, ArgAction, ArgMatches, Command as ClapCommand, builder::OsStringValueParser};
+use clap::{builder::OsStringValueParser, Arg, ArgAction, ArgMatches, Command as ClapCommand};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SpawnMode {
@@ -14,9 +14,6 @@ pub enum CliCommand {
     Bringdown,
     CfgPull,
     CfgPush,
-    Init {
-        force: bool,
-    },
     InstallFromRepo,
     SummaryPid {
         pid: i32,
@@ -66,16 +63,6 @@ pub fn command() -> ClapCommand {
         .subcommand(
             ClapCommand::new("cfgpush")
                 .about("Install config.json and ACL.json from the current directory"),
-        )
-        .subcommand(
-            ClapCommand::new("init")
-                .about("Initialize Heretek config and data directories")
-                .arg(
-                    Arg::new("force")
-                        .long("force")
-                        .action(ArgAction::SetTrue)
-                        .help("Reinitialize existing Heretek directories"),
-                ),
         )
         .subcommand(
             ClapCommand::new("install-from-repo")
@@ -166,9 +153,6 @@ impl CliCommand {
             Some(("down", _)) => Self::Bringdown,
             Some(("cfgpull", _)) => Self::CfgPull,
             Some(("cfgpush", _)) => Self::CfgPush,
-            Some(("init", sub_matches)) => Self::Init {
-                force: sub_matches.get_flag("force"),
-            },
             Some(("install-from-repo", _)) => Self::InstallFromRepo,
             Some(("debug-action", _)) => Self::DebugAction,
             Some(("summary", sub_matches)) => {
@@ -236,7 +220,7 @@ impl CliCommand {
 
 #[cfg(test)]
 mod tests {
-    use super::{CliCommand, SpawnMode, parse_from};
+    use super::{parse_from, CliCommand, SpawnMode};
 
     #[test]
     fn parses_install_from_repo() {
@@ -257,27 +241,9 @@ mod tests {
     }
 
     #[test]
-    fn parses_init() {
-        assert_eq!(
-            parse_from(["htek", "init"]),
-            CliCommand::Init { force: false }
-        );
-    }
-
-    #[test]
-    fn parses_init_force() {
-        assert_eq!(
-            parse_from(["htek", "init", "--force"]),
-            CliCommand::Init { force: true }
-        );
-    }
-
-    #[test]
     fn parses_spawn_with_profile() {
         assert_eq!(
-            parse_from([
-                "htek", "spawn", "-p", "hardened", "-s", "--", "npm", "run", "build"
-            ]),
+            parse_from(["htek", "spawn", "-p", "hardened", "-s", "--", "npm", "run", "build"]),
             CliCommand::Spawn {
                 profile: Some("hardened".to_string()),
                 mode: Some(SpawnMode::Sync),

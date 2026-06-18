@@ -1,7 +1,6 @@
-use std::{fmt::Write, os::unix::net::UnixListener, path::PathBuf};
+mod uds;
 
-use anyhow::{Context, Result, anyhow, bail};
-pub use htek_lib::rpc::{Rpc, RpcResult, StreamSendable};
+use std::{fmt::Write, path::PathBuf, process};
 
 use crate::{
     build_params,
@@ -10,19 +9,24 @@ use crate::{
     uinterf::Config,
     utils,
 };
+use anyhow::{Context, Result, anyhow, bail};
+pub use htek_lib::rpc::{Rpc, RpcResult};
+pub use uds::*;
 
-pub fn handle_rpc(config: &Config, pgraph_db: &mut PGraph, socket: &UnixListener) -> Result<()> {
-    let mut stream = match socket.accept() {
-        Ok((stream, _)) => stream,
-        Err(_e) => {
-            // We get an "os error 11" if there are no messages in the message queue.
-            return Ok(());
+pub fn handle_rpc(
+    config: &Config,
+    pgraph_db: &mut PGraph,
+    rpcobj: Rpc,
+    is_root: bool,
+) -> Result<RpcResult> {
+    if !is_root {
+        match &rpcobj {
+            Rpc::SetChildProfile { .. } => {}
+            _ => return Ok(RpcResult::Error("Root permissions required".to_string())),
         }
-    };
+    }
 
-    let rpc = Rpc::try_stream_recv(&mut stream)?;
-
-    match rpc {
+    let res = match rpcobj {
         Rpc::GetSummaryExe { exe_path } => {
             let mut payload = String::with_capacity(4096);
 
@@ -44,8 +48,7 @@ pub fn handle_rpc(config: &Config, pgraph_db: &mut PGraph, socket: &UnixListener
             if payload.is_empty() {
                 payload.push_str("No actors found");
             }
-            let res = RpcResult::GetSummary(payload);
-            res.try_stream_send(&mut stream)?;
+            RpcResult::GetSummary(payload)
         }
         Rpc::GetSummaryPid { pid } => {
             let res_json = match pgraph_db.get_latest_mut(pid) {
@@ -55,11 +58,10 @@ pub fn handle_rpc(config: &Config, pgraph_db: &mut PGraph, socket: &UnixListener
                 }
             };
 
-            let res = RpcResult::GetSummary(res_json);
-            res.try_stream_send(&mut stream)?;
+            RpcResult::GetSummary(res_json)
         }
         Rpc::SetProfile { profile, pid } => {
-            let res = match handle_set_profile(config, pgraph_db, &profile, pid) {
+            match handle_set_profile(config, pgraph_db, &profile, pid) {
                 Ok(()) => RpcResult::SetProfileRes {
                     msg: "success".to_string(),
                     success: true,
@@ -68,8 +70,7 @@ pub fn handle_rpc(config: &Config, pgraph_db: &mut PGraph, socket: &UnixListener
                     msg: format!("{}", e),
                     success: false,
                 },
-            };
-            res.try_stream_send(&mut stream)?;
+            }
         }
         Rpc::SetChildProfile { pid, profiles } => {
             let node = pgraph_db
@@ -79,27 +80,23 @@ pub fn handle_rpc(config: &Config, pgraph_db: &mut PGraph, socket: &UnixListener
                 node.actor.actor_md.child_profile.insert(p.clone());
             }
 
-            let res = RpcResult::SetChildProfileRes {
+            RpcResult::SetChildProfileRes {
                 msg: "".to_string(),
                 success: true,
-            };
-            res.try_stream_send(&mut stream)?;
+            }
         }
         Rpc::Bringdown => {
             tracing::info!("Received shutdown request. Exiting cleanly.");
             utils::clean_shutdown(config)?;
+            process::exit(0);
         }
-        Rpc::Touched { file } => {
-            let res = handle_touched(pgraph_db, file);
-            res.try_stream_send(&stream)?;
-        }
+        Rpc::Touched { file } => handle_touched(pgraph_db, file),
         Rpc::DebugAction => {
             if !(cfg!(debug_assertions) || build_params::ASSERTS) {
                 let res = RpcResult::DebugActionRes(
                     "debug action not supported in release/prod mode".to_string(),
                 );
-                res.try_stream_send(stream)?;
-                return Ok(());
+                return Ok(res);
             }
             let mut payload = String::new();
             for (_, node) in pgraph_db.nodes.iter() {
@@ -107,11 +104,10 @@ pub fn handle_rpc(config: &Config, pgraph_db: &mut PGraph, socket: &UnixListener
                 payload.push_str(&s);
                 payload.push_str("");
             }
-            let res = RpcResult::DebugActionRes(payload);
-            res.try_stream_send(stream)?;
+            RpcResult::DebugActionRes(payload)
         }
-    }
-    Ok(())
+    };
+    Ok(res)
 }
 
 fn handle_set_profile(

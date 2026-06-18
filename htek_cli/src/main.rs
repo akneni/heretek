@@ -1,7 +1,7 @@
 use std::{
     collections::HashSet,
     ffi::OsString,
-    fs,
+    fs::{self, Permissions},
     io::{self, Write},
     os::unix::fs::PermissionsExt,
     path::Path,
@@ -14,16 +14,18 @@ use anyhow::{Context, Result, anyhow, bail};
 use htek_lib::{
     config::LoadedConfig,
     htdirs,
-    rpc::{self, Rpc, RpcResult, StreamSendable},
+    rpc::{Rpc, RpcResult},
 };
 use rustix::process::{Gid, Uid};
 
 use crate::{
     cli::{CliCommand, SpawnMode},
+    uds::RpcClient,
     utils::spawn_cmd,
 };
 
 mod cli;
+mod uds;
 mod utils;
 
 fn bringup(config: &LoadedConfig) -> Result<()> {
@@ -31,7 +33,7 @@ fn bringup(config: &LoadedConfig) -> Result<()> {
         bail!("Requires root privilages");
     }
 
-    if let Ok(_) = rpc::try_connect() {
+    if let Ok(_) = RpcClient::new() {
         eprintln!("heretek daemon seems to already be running!");
         return Ok(());
     }
@@ -46,7 +48,7 @@ fn bringup(config: &LoadedConfig) -> Result<()> {
 
     let mut sleep_ms = 75;
     for _i in 0..4 {
-        match rpc::try_connect() {
+        match RpcClient::new() {
             Ok(_) => {
                 println!("Spawned daemon successfully");
                 return Ok(());
@@ -71,9 +73,9 @@ fn bringdown(_config: &LoadedConfig) -> Result<()> {
 
     let mut sleep_ms = 75;
     for i in 0..4 {
-        match rpc::try_connect() {
-            Ok(stream) => {
-                Rpc::Bringdown.try_stream_send(&stream)?;
+        match RpcClient::new() {
+            Ok(mut client) => {
+                let _ = client.call_rpc_sync(Rpc::Bringdown);
             }
             Err(_) => {
                 if i == 0 {
@@ -115,7 +117,7 @@ fn print_daemon_traces(_config: &LoadedConfig) -> Result<()> {
 }
 
 /// Deletes all .ebpf.o files inside of the eBPF object directory
-fn purge_bpf_objects(_config: &LoadedConfig) -> Result<()> {
+fn purge_bpf_objects() -> Result<()> {
     let bpf_dir = htdirs::bpf_obj_path();
 
     for entry in
@@ -138,7 +140,7 @@ fn purge_bpf_objects(_config: &LoadedConfig) -> Result<()> {
     Ok(())
 }
 
-fn install_from_repo(config: &LoadedConfig) -> Result<()> {
+fn install_from_repo() -> Result<()> {
     if whoami::username()? != "root" {
         bail!("Requires root privilages");
     }
@@ -152,8 +154,10 @@ fn install_from_repo(config: &LoadedConfig) -> Result<()> {
         }
     }
 
+    init_htekdirs()?;
+
     let bpf_dir = htdirs::bpf_obj_path();
-    purge_bpf_objects(config)?;
+    purge_bpf_objects()?;
     for file in build.read_dir()? {
         let file = file?;
         let fname = file.file_name();
@@ -250,39 +254,50 @@ fn cfgpush(_config: &LoadedConfig) -> Result<()> {
     Ok(())
 }
 
-fn init(force: bool) -> Result<()> {
+/// Initalizes the heretek directories.
+fn init_htekdirs() -> Result<()> {
     if whoami::username()? != "root" {
         bail!("Requires root privilages");
     }
 
     let mfile = htdirs::htek_magic_file_path();
     let cfg_dir = htdirs::config_dir();
-    let data_dir = htdirs::data_dir();
+    let data_dir = htdirs::data_dir().to_path_buf();
+    let bpf_dir = htdirs::bpf_obj_path();
 
-    if !force {
-        if !mfile.exists() && (cfg_dir.exists() || data_dir.exists()) {
-            let msg = r#"
+    if !mfile.exists() && data_dir.exists() {
+        let msg = r#"
                 It seems like another app is already using the heretek config & data directory.
                 If want to forcibly overwrite these directories, run `sudo htek init --force`
             "#;
-            bail!(msg);
-        } else if mfile.exists() {
-            return Ok(());
-        }
+        bail!(msg);
+    } else if mfile.exists() {
+        return Ok(());
     }
 
-    fs::remove_dir_all(cfg_dir)?;
-    fs::remove_dir_all(data_dir)?;
+    fs::create_dir_all(&cfg_dir)?;
+    fs::create_dir_all(&data_dir)?;
+    fs::create_dir_all(&bpf_dir)?;
+    fs::set_permissions(&cfg_dir, Permissions::from_mode(0o755))?;
+    fs::set_permissions(&data_dir, Permissions::from_mode(0o755))?;
+    fs::set_permissions(&bpf_dir, Permissions::from_mode(0o700))?;
+
+    let cpath = htdirs::cfgfile_path();
+    let apath = htdirs::acl_path();
+    fs::write(&cpath, htek_lib::CONFIG_JSON)?;
+    fs::write(&apath, htek_lib::ACL_JSON)?;
+    fs::set_permissions(&cpath, Permissions::from_mode(0o644))?;
+    fs::set_permissions(&apath, Permissions::from_mode(0o600))?;
+
+    fs::write(
+        &mfile,
+        "This file prevents collitions on the name heretek. Ignore it but dont delete it.",
+    )?;
+    fs::set_permissions(&mfile, Permissions::from_mode(0o644))?;
 
     htek_lib::config::validate_environment()?;
 
     Ok(())
-}
-
-fn rpc_call(_config: &LoadedConfig, request: Rpc) -> Result<RpcResult> {
-    let stream = rpc::try_connect().context("Heretek daemon is not running")?;
-    request.try_stream_send(&stream)?;
-    RpcResult::try_stream_recv(&stream)
 }
 
 fn spawn_as_profile(
@@ -296,16 +311,15 @@ fn spawn_as_profile(
         let mut profiles = HashSet::new();
         profiles.insert(profile);
 
-        let stream = rpc::try_connect()?;
+        let mut client = RpcClient::new()?;
 
-        let req = rpc::Rpc::SetChildProfile {
+        let req = Rpc::SetChildProfile {
             pid: process::id() as i32,
             profiles,
         };
-        req.try_stream_send(&stream)?;
 
-        let res = rpc::RpcResult::try_stream_recv(&stream)?;
-        if let rpc::RpcResult::SetChildProfileRes { msg, success } = res {
+        let res = client.call_rpc_sync(req)?;
+        if let RpcResult::SetChildProfileRes { msg, success } = res {
             if !success {
                 bail!(msg);
             }
@@ -319,14 +333,18 @@ fn spawn_as_profile(
     spawn_cmd(command, mode)
 }
 
+fn rpc_call(_config: &LoadedConfig, request: Rpc) -> Result<RpcResult> {
+    let mut client = RpcClient::new().context("Heretek daemon is not running")?;
+    client.call_rpc_sync(request)
+}
+
 fn run(config: &LoadedConfig, command: CliCommand) -> Result<()> {
     match command {
         CliCommand::Bringup => bringup(config),
         CliCommand::Bringdown => bringdown(config),
         CliCommand::CfgPull => cfgpull(config),
         CliCommand::CfgPush => cfgpush(config),
-        CliCommand::Init { .. } => unreachable!(),
-        CliCommand::InstallFromRepo => install_from_repo(config),
+        CliCommand::InstallFromRepo => unreachable!(),
         CliCommand::SummaryPid { pid } => match rpc_call(config, Rpc::GetSummaryPid { pid })? {
             RpcResult::GetSummary(summary) => {
                 println!("{summary}");
@@ -386,12 +404,12 @@ fn run(config: &LoadedConfig, command: CliCommand) -> Result<()> {
 
 fn main() {
     let cli_args = cli::parse_cli();
-    if let &CliCommand::Init { force } = &cli_args {
-        if let Err(e) = init(force) {
+    if let CliCommand::InstallFromRepo = cli_args {
+        if let Err(e) = install_from_repo() {
             eprintln!("{e}");
             process::exit(1);
         }
-        process::exit(0);
+        return;
     }
 
     let config = match htek_lib::config::LoadedConfig::load() {
