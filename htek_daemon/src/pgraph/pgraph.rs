@@ -305,12 +305,7 @@ impl PGraph {
             let initial_len = errors.len();
             let mut unchaineds_curr = HashSet::new();
             unchaineds_curr.insert(tuid);
-            loop {
-                let curr_tuid = match curr_node.creator_tuid {
-                    Some(r) => r,
-                    None => break,
-                };
-
+            while let Some(curr_tuid) = curr_node.creator_tuid {
                 if unchaineds.contains(&curr_tuid) {
                     break;
                 }
@@ -379,12 +374,7 @@ impl PGraph {
             nodes_seen.insert(tuid);
 
             let mut curr_node = node;
-            loop {
-                let curr_tuid = match curr_node.creator_tuid {
-                    Some(r) => r,
-                    None => break,
-                };
-
+            while let Some(curr_tuid) = curr_node.creator_tuid {
                 if nodes_seen.contains(&curr_tuid) {
                     errors.push(format!(
                         "Pgrah has cyclic references.\nTUID: {:?}",

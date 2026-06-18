@@ -1,5 +1,6 @@
 mod actor;
 mod event;
+#[allow(clippy::module_inception)]
 mod pgraph;
 
 use std::process;

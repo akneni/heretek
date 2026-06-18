@@ -7,7 +7,6 @@ use rustix::fs::{Gid, Uid};
 
 use crate::htdirs;
 
-///
 pub fn set_root_owned_public(fpath: &Path) -> Result<()> {
     rustix::fs::chown(fpath, Some(Uid::ROOT), Some(Gid::ROOT))?;
     fs::set_permissions(fpath, fs::Permissions::from_mode(0o644))?;

@@ -33,7 +33,7 @@ fn bringup(config: &LoadedConfig) -> Result<()> {
         bail!("Requires root privilages");
     }
 
-    if let Ok(_) = RpcClient::new() {
+    if RpcClient::new().is_ok() {
         eprintln!("heretek daemon seems to already be running!");
         return Ok(());
     }

@@ -1,7 +1,7 @@
 use std::{
     collections::HashSet,
     fs::File,
-    io::{self, Seek, Write as IoWrite},
+    io::Write as IoWrite,
 };
 
 use anyhow::Result;
