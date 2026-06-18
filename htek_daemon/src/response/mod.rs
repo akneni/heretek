@@ -198,9 +198,11 @@ fn log(
         }
 
         let alert_path = htdirs::violation_log_path();
-        let mut fp = File::options().write(true).create(true).open(&alert_path)?;
+        let mut fp = File::options()
+            .append(true)
+            .create(true)
+            .open(&alert_path)?;
 
-        fp.seek(io::SeekFrom::End(0))?;
         writeln!(fp, "{}", alert)?;
     }
 

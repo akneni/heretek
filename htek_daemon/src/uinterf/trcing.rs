@@ -21,7 +21,11 @@ impl IncFile {
         let ts = chrono::Utc::now().format("%Y-%m-%dT%H-%M-%SZ").to_string();
         let inc_path = htdirs::data_dir().join(format!("{}.incident", ts));
 
-        let fp = File::options().create(true).write(true).open(&inc_path)?;
+        let fp = File::options()
+            .create(true)
+            .truncate(true)
+            .write(true)
+            .open(&inc_path)?;
         let mut inc_file = Self { fp, timer };
 
         writeln!(inc_file.fp, "INCIDENT: {}\n\n\n", desc)?;

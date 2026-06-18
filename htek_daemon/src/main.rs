@@ -39,7 +39,11 @@ fn daemon_init(config: &Config) -> Result<(RpcServer, BpfEventArrayReader)> {
     uinterf::prep_logs(config).context("Failed to prepare the logfiles")?;
 
     let trc_path = htdirs::tracefile_path();
-    let trc_fp = File::options().create(true).write(true).open(&trc_path)?;
+    let trc_fp = File::options()
+        .create(true)
+        .truncate(true)
+        .write(true)
+        .open(&trc_path)?;
 
     tracing_subscriber::registry()
         .with(tracing_subscriber::fmt::layer().with_writer(std::io::stdout))
