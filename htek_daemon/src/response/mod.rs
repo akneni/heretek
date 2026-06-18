@@ -1,8 +1,4 @@
-use std::{
-    collections::HashSet,
-    fs::File,
-    io::Write as IoWrite,
-};
+use std::{collections::HashSet, fs::File, io::Write as IoWrite};
 
 use anyhow::Result;
 use htek_lib::htdirs;
