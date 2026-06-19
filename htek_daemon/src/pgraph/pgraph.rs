@@ -54,6 +54,7 @@ impl PGraphNode {
         let status: &str = match actor.actor_md.state {
             ActorState::Running => "running ",
             ActorState::Exited => "exited  ",
+            ActorState::KilledByHtekd => "killed  ",
         };
 
         let ppid = self
@@ -163,7 +164,10 @@ impl PGraph {
         };
         creator.child_tuids.insert(actor.id);
 
-        // Make Child actor inheric creator's child profiles
+        // Make Child actor inheric creator's profiles and child profiles
+        for prof in creator.actor.actor_md.profile.iter() {
+            actor.actor_md.profile.insert(prof.clone());
+        }
         for prof in creator.actor.actor_md.child_profile.iter() {
             actor.actor_md.profile.insert(prof.clone());
         }
@@ -182,15 +186,6 @@ impl PGraph {
         pnode.unchained_chain = unchained_chain;
         pnode.actor.actor_md.cwd = cwd;
         self.nodes.insert(pnode.actor.id, pnode);
-    }
-
-    #[allow(unused)]
-    fn get_or_create(&mut self, tuid: ActorTuid) -> &mut PGraphNode {
-        let entry = self.nodes.entry(tuid);
-        entry.or_insert_with(|| {
-            let actor = Actor::new(tuid.pid, tuid.start_ktime);
-            PGraphNode::new(actor, None)
-        })
     }
 }
 
@@ -280,150 +275,6 @@ impl PGraph {
         pgraph
     }
 
-    /// Checks that all nodes with unchained_chain = true are really unchaned
-    /// and checks that the same is true for all it's parents.
-    /// This function does nothing and is compiled out if the ASSERTS feature is turned off
-    pub fn check_unchained_chains_asso(&self) {
-        if !build_params::ASSERTS {
-            return;
-        }
-
-        let timer = Instant::now();
-        let mut unchaineds: HashSet<ActorTuid> = HashSet::new();
-        let mut errors = vec![];
-
-        for (&tuid, node) in self.nodes.iter() {
-            if !node.unchained_chain {
-                continue;
-            }
-
-            if !node.actor.is_unchained() {
-                errors.push(format!(
-                    "unchained chain actor isn't unchained\nActor TUID: {:?}",
-                    tuid
-                ));
-            }
-
-            let mut curr_node = node;
-            let initial_len = errors.len();
-            let mut unchaineds_curr = HashSet::new();
-            unchaineds_curr.insert(tuid);
-            while let Some(curr_tuid) = curr_node.creator_tuid {
-                if unchaineds.contains(&curr_tuid) {
-                    break;
-                }
-                curr_node = match self.nodes.get(&curr_tuid) {
-                    Some(r) => r,
-                    None => {
-                        errors.push(format!(
-                            "Actor has a creator_tuid that doesn't exist\nParent TUID: {:?}\nChild TUID: {:?}",
-                            curr_tuid,
-                            tuid,
-                        ));
-                        continue;
-                    }
-                };
-
-                if !curr_node.actor.is_unchained() {
-                    errors.push(format!(
-                        "unchained chain actor has a chained parent\nParent TUID: {:?}\nChild TUID: {:?}",
-                        curr_node.actor.id,
-                        tuid,
-                    ));
-                }
-                unchaineds_curr.insert(curr_tuid);
-            }
-
-            if initial_len == errors.len() {
-                unchaineds.extend(unchaineds_curr.iter());
-            }
-        }
-
-        if !errors.is_empty() {
-            let mut inc_file = match IncFile::new("ASSERTION FAILED [check_unchained_chains_dbgo]")
-            {
-                Ok(r) => r,
-                Err(e) => {
-                    tracing::error!("Failed to create incident file: {e}");
-                    utils::clean_shutdown(1);
-                }
-            };
-
-            let _ = inc_file.dmp_stacktrace();
-            let _ = inc_file.dmp_debugable("Errors", &errors);
-            let _ = inc_file.dmp_pgraph(self);
-            drop(inc_file);
-            utils::clean_shutdown(1);
-        }
-
-        if build_params::PERF_TRACKING {
-            tracing::info!(
-                "Time Elapsed [check_unchained_chains_dbgo]: {:?}",
-                timer.elapsed()
-            );
-        }
-    }
-
-    pub fn check_cycles_asso(&self) {
-        if !build_params::ASSERTS {
-            return;
-        }
-
-        let timer = Instant::now();
-        let mut errors = vec![];
-
-        let mut nodes_seen = HashSet::new();
-        for (&tuid, node) in self.nodes.iter() {
-            nodes_seen.clear();
-            nodes_seen.insert(tuid);
-
-            let mut curr_node = node;
-            while let Some(curr_tuid) = curr_node.creator_tuid {
-                if nodes_seen.contains(&curr_tuid) {
-                    errors.push(format!(
-                        "Pgrah has cyclic references.\nTUID: {:?}",
-                        curr_tuid
-                    ));
-                } else {
-                    nodes_seen.insert(curr_tuid);
-                }
-
-                curr_node = match self.nodes.get(&curr_tuid) {
-                    Some(r) => r,
-                    None => {
-                        errors.push(format!(
-                            "Actor has a creator_tuid that doesn't exist\nParent TUID: {:?}\nChild TUID: {:?}",
-                            curr_tuid,
-                            tuid,
-                        ));
-                        continue;
-                    }
-                };
-            }
-        }
-
-        if !errors.is_empty() {
-            let mut inc_file = match IncFile::new("ASSERTION FAILED [check_unchained_chains_dbgo]")
-            {
-                Ok(r) => r,
-                Err(e) => {
-                    tracing::error!("Failed to create incident file: {e}");
-                    utils::clean_shutdown(1);
-                }
-            };
-
-            let _ = inc_file.dmp_stacktrace();
-            let _ = inc_file.dmp_debugable("Errors", &errors);
-            let _ = inc_file.dmp_pgraph(self);
-            drop(inc_file);
-            utils::clean_shutdown(1);
-        }
-
-        if build_params::PERF_TRACKING {
-            tracing::info!("Time Elapsed [check_cycles_dbgo]: {:?}", timer.elapsed());
-        }
-    }
-
     fn compute_bootstrap_unchained_chain(
         tuid: ActorTuid,
         nodes: &HashMap<ActorTuid, PGraphNode>,
@@ -509,5 +360,220 @@ impl PGraph {
         }
 
         Ok(hz as u64)
+    }
+}
+
+/// This impl block containsa bunch of assert only (asso) functions
+/// Their only purpose is to check invarients in the PGraph
+/// All functions here will be compiled out if the ASSERTS is false
+impl PGraph {
+    /// All nodes with unchained_chain = true must be unchaned, and all their parents must also
+    /// be unchained and have unchained_chain = true
+    pub fn check_unchained_chains_asso(&self) {
+        if !build_params::ASSERTS {
+            return;
+        }
+
+        let timer = Instant::now();
+        let mut unchaineds: HashSet<ActorTuid> = HashSet::new();
+        let mut errors = vec![];
+
+        for (&tuid, node) in self.nodes.iter() {
+            if !node.unchained_chain {
+                continue;
+            }
+
+            if !node.actor.is_unchained() {
+                errors.push(format!(
+                    "unchained chain actor isn't unchained\nActor TUID: {:?}",
+                    tuid
+                ));
+            }
+
+            let mut curr_node = node;
+            let initial_len = errors.len();
+            let mut unchaineds_curr = HashSet::new();
+            unchaineds_curr.insert(tuid);
+            while let Some(curr_tuid) = curr_node.creator_tuid {
+                if unchaineds.contains(&curr_tuid) {
+                    break;
+                }
+                curr_node = match self.nodes.get(&curr_tuid) {
+                    Some(r) => r,
+                    None => {
+                        errors.push(format!(
+                            "Actor has a creator_tuid that doesn't exist\nParent TUID: {:?}\nChild TUID: {:?}",
+                            curr_tuid,
+                            tuid,
+                        ));
+                        continue;
+                    }
+                };
+
+                if !curr_node.actor.is_unchained() {
+                    errors.push(format!(
+                        "unchained chain actor has a chained parent\nParent TUID: {:?}\nChild TUID: {:?}",
+                        curr_node.actor.id,
+                        tuid,
+                    ));
+                }
+                unchaineds_curr.insert(curr_tuid);
+            }
+
+            if initial_len == errors.len() {
+                unchaineds.extend(unchaineds_curr.iter());
+            }
+        }
+
+        if !errors.is_empty() {
+            let mut inc_file = match IncFile::new("ASSERTION FAILED [check_unchained_chains_dbgo]")
+            {
+                Ok(r) => r,
+                Err(e) => {
+                    tracing::error!("Failed to create incident file: {e}");
+                    utils::clean_shutdown(1);
+                }
+            };
+
+            let _ = inc_file.dmp_stacktrace();
+            let _ = inc_file.dmp_debugable("Errors", &errors);
+            let _ = inc_file.dmp_pgraph(self);
+            drop(inc_file);
+            utils::clean_shutdown(1);
+        }
+
+        if build_params::PERF_TRACKING {
+            tracing::info!(
+                "Time Elapsed [check_unchained_chains_dbgo]: {:?}",
+                timer.elapsed()
+            );
+        }
+    }
+
+    /// No node can have another node that is both its creator and its child
+    pub fn check_cycles_asso(&self) {
+        if !build_params::ASSERTS {
+            return;
+        }
+
+        let timer = Instant::now();
+        let mut errors = vec![];
+
+        let mut nodes_seen = HashSet::new();
+        for (&tuid, node) in self.nodes.iter() {
+            nodes_seen.clear();
+            nodes_seen.insert(tuid);
+
+            let mut curr_node = node;
+            while let Some(curr_tuid) = curr_node.creator_tuid {
+                if nodes_seen.contains(&curr_tuid) {
+                    errors.push(format!(
+                        "Pgrah has cyclic references.\nTUID: {:?}",
+                        curr_tuid
+                    ));
+                } else {
+                    nodes_seen.insert(curr_tuid);
+                }
+
+                curr_node = match self.nodes.get(&curr_tuid) {
+                    Some(r) => r,
+                    None => {
+                        errors.push(format!(
+                            "Actor has a creator_tuid that doesn't exist\nParent TUID: {:?}\nChild TUID: {:?}",
+                            curr_tuid,
+                            tuid,
+                        ));
+                        continue;
+                    }
+                };
+            }
+        }
+
+        if !errors.is_empty() {
+            let mut inc_file = match IncFile::new("ASSERTION FAILED [check_unchained_chains_dbgo]")
+            {
+                Ok(r) => r,
+                Err(e) => {
+                    tracing::error!("Failed to create incident file: {e}");
+                    utils::clean_shutdown(1);
+                }
+            };
+
+            let _ = inc_file.dmp_stacktrace();
+            let _ = inc_file.dmp_debugable("Errors", &errors);
+            let _ = inc_file.dmp_pgraph(self);
+            drop(inc_file);
+            utils::clean_shutdown(1);
+        }
+
+        if build_params::PERF_TRACKING {
+            tracing::info!("Time Elapsed [check_cycles_dbgo]: {:?}", timer.elapsed());
+        }
+    }
+
+    /// All nodes whose actors have the state KilledByHtekd must not have any childred
+    /// whose states are not also KilledByHtekd
+    pub fn check_killed_children_asso(&self) {
+        if !build_params::ASSERTS {
+            return;
+        }
+
+        let timer = Instant::now();
+        let mut errors = vec![];
+
+        for (&root_tuid, root_node) in self.nodes.iter() {
+            if root_node.actor.actor_md.state != ActorState::KilledByHtekd {
+                continue;
+            }
+
+            let mut nodes_seen = HashSet::new();
+            let mut to_check = root_node.child_tuids.iter().copied().collect::<Vec<_>>();
+
+            while let Some(tuid) = to_check.pop() {
+                if !nodes_seen.insert(tuid) {
+                    continue;
+                }
+
+                let node = match self.nodes.get(&tuid) {
+                    Some(r) => r,
+                    None => {
+                        errors.push(format!(
+                            "Killed actor has a child_tuid that doesn't exist\nParent TUID: {:?}\nChild TUID: {:?}",
+                            root_tuid, tuid,
+                        ));
+                        continue;
+                    }
+                };
+
+                if node.actor.actor_md.state != ActorState::KilledByHtekd {
+                    errors.push(format!(
+                        "Killed actor has a non-killed child\nParent TUID: {:?}\nChild TUID: {:?}\nChild State: {:?}",
+                        root_tuid, tuid, node.actor.actor_md.state,
+                    ));
+                }
+
+                to_check.extend(node.child_tuids.iter().copied());
+            }
+        }
+
+        if !errors.is_empty() {
+            let mut inc_file = match IncFile::new("ASSERTION FAILED [killed_tree_dbgo]") {
+                Ok(r) => r,
+                Err(e) => {
+                    tracing::error!("Failed to create incident file: {e}");
+                    utils::clean_shutdown(1);
+                }
+            };
+
+            let _ = inc_file.dmp_stacktrace();
+            let _ = inc_file.dmp_debugable("Errors", &errors);
+            let _ = inc_file.dmp_pgraph(self);
+            drop(inc_file);
+            utils::clean_shutdown(1);
+        }
+
+        if build_params::PERF_TRACKING {
+            tracing::info!("Time Elapsed [killed_tree_dbgo]: {:?}", timer.elapsed());
+        }
     }
 }

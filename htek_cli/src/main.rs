@@ -12,7 +12,7 @@ use std::{
 
 use anyhow::{Context, Result, anyhow, bail};
 use htek_lib::{
-    config::LoadedConfig,
+    config::ConfigFile,
     htdirs,
     rpc::{Rpc, RpcResult},
 };
@@ -28,7 +28,7 @@ mod cli;
 mod uds;
 mod utils;
 
-fn bringup(config: &LoadedConfig) -> Result<()> {
+fn bringup(_config: &ConfigFile) -> Result<()> {
     if whoami::username()? != "root" {
         bail!("Requires root privilages");
     }
@@ -61,12 +61,12 @@ fn bringup(config: &LoadedConfig) -> Result<()> {
     }
 
     eprintln!("Time out exceeded. Daemon spawned but has since crashed or is unresponsive.");
-    print_daemon_traces(config)?;
+    print_daemon_traces()?;
 
     Ok(())
 }
 
-fn bringdown(_config: &LoadedConfig) -> Result<()> {
+fn bringdown() -> Result<()> {
     if whoami::username()? != "root" {
         bail!("Requires root privilages");
     }
@@ -95,7 +95,7 @@ fn bringdown(_config: &LoadedConfig) -> Result<()> {
     process::exit(1);
 }
 
-fn print_daemon_traces(_config: &LoadedConfig) -> Result<()> {
+fn print_daemon_traces() -> Result<()> {
     let traces = match fs::read(htdirs::tracefile_path()) {
         Ok(r) => r,
         Err(_) => {
@@ -178,7 +178,7 @@ fn install_from_repo() -> Result<()> {
     Ok(())
 }
 
-fn cfgpull(_config: &LoadedConfig) -> Result<()> {
+fn cfgpull() -> Result<()> {
     let cgf_files = [
         (htdirs::acl_path(), htek_lib::config::ACL_JSON),
         (htdirs::cfgfile_path(), htek_lib::config::CONFIG_JSON),
@@ -218,16 +218,13 @@ fn cfgpull(_config: &LoadedConfig) -> Result<()> {
 
 /// Pushes config.json and ACL.json from the current directory the heretek config directory
 /// Skips over either of these files if they don't exist in the current directory.
-fn cfgpush(_config: &LoadedConfig) -> Result<()> {
+fn cfgpush() -> Result<()> {
     if whoami::username()? != "root" {
         bail!("Requires root privilages");
     }
 
-    let cgf_files = [
-        Path::new("/root/.config/heretek/ACL.json"),
-        Path::new("/root/.config/heretek/config.json"),
-    ];
-    for fpath_hcfg in cgf_files {
+    let cgf_files = [htdirs::acl_path(), htdirs::cfgfile_path()];
+    for fpath_hcfg in &cgf_files {
         let fname = fpath_hcfg
             .file_name()
             .ok_or(anyhow!("failed to get filename"))?
@@ -248,6 +245,8 @@ fn cfgpush(_config: &LoadedConfig) -> Result<()> {
             .with_context(|| format!("failed to chown {}", fpath_hcfg.display()))?;
 
         fs::set_permissions(fpath_hcfg, fs::Permissions::from_mode(0o644))?;
+
+        fs::remove_file(fpath_cwd)?;
 
         println!("Successfully pushed {}", fpath_cwd.display());
     }
@@ -301,7 +300,6 @@ fn init_htekdirs() -> Result<()> {
 }
 
 fn spawn_as_profile(
-    _config: &LoadedConfig,
     profile: Option<String>,
     mode: Option<SpawnMode>,
     command: Vec<OsString>,
@@ -338,12 +336,12 @@ fn spawn_as_profile(
     spawn_cmd(command, mode)
 }
 
-fn run(config: &LoadedConfig, command: CliCommand) -> Result<()> {
+fn run(config: &ConfigFile, command: CliCommand) -> Result<()> {
     match command {
         CliCommand::Bringup => bringup(config),
-        CliCommand::Bringdown => bringdown(config),
-        CliCommand::CfgPull => cfgpull(config),
-        CliCommand::CfgPush => cfgpush(config),
+        CliCommand::Bringdown => bringdown(),
+        CliCommand::CfgPull => cfgpull(),
+        CliCommand::CfgPush => cfgpush(),
         CliCommand::InstallFromRepo => unreachable!(),
         CliCommand::SummaryPid { pid } => {
             let mut client = RpcClient::new().context("Heretek daemon is not running")?;
@@ -384,7 +382,7 @@ fn run(config: &LoadedConfig, command: CliCommand) -> Result<()> {
             mode,
             command,
         } => {
-            spawn_as_profile(config, profile, mode, command)?;
+            spawn_as_profile(profile, mode, command)?;
             Ok(())
         }
         CliCommand::Touched { file } => {
@@ -421,7 +419,7 @@ fn main() {
         return;
     }
 
-    let config = match htek_lib::config::LoadedConfig::load() {
+    let config = match htek_lib::config::ConfigFile::load() {
         Ok(r) => r,
         Err(e) => {
             eprintln!("Failed to load config: {e}");

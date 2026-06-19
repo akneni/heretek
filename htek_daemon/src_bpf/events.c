@@ -24,14 +24,16 @@ typedef struct event {
 } event;
 
 typedef struct event_array_md {
-    __u64 head;
+    __u32 canary;
+    __u32 length;
 } event_array_md;
 
 #define PARAM_FLG_IMMORTAL 0 // Blocks all attempts to kill the heretek daemon
 #define PARAM_FLG_BOFRB    1 // Block on Full Ring Buffer
 typedef struct parameters {
-    __u64 flags;
+    __u32 canary;
     __s32 daemon_pid;
+    __u64 flags;
 } parameters;
 
 typedef union event_slot {
@@ -52,25 +54,63 @@ static __always_inline parameters *get_params() {
     return (parameters *)bpf_map_lookup_elem(&events, &md_key);
 }
 
+static void check_canary() {
+    if (!ASSERTS) return;
+
+    __u32 evtmd_key = EVENT_METADATA_SLOT;
+    event_array_md *evtmd = (event_array_md *)bpf_map_lookup_elem(&events, &evtmd_key);
+    __u32 param_key = EVENT_PARAM_SLOT;
+    parameters *param = (parameters *)bpf_map_lookup_elem(&events, &param_key);
+
+    if (evtmd != NULL) {
+        if (evtmd->canary == 0) evtmd->canary = EVTMD_CANARY;
+        if (evtmd->canary != EVTMD_CANARY) {
+            bpf_printk("Event metadata canary died\n");
+        }
+    }
+
+    if (param != NULL) {
+        if (param->canary == 0) param->canary = EVTMD_CANARY;
+        if (param->canary != PARAM_CANARY) {
+            bpf_printk("Parameter canary died\n");
+        }
+    }
+}
+
 /// This function does NOT zero out the event struct
 static __always_inline event *reserve_event_slot() {
+    check_canary();
+
     __u32 md_key = EVENT_METADATA_SLOT;
     event_array_md *md = (event_array_md *)bpf_map_lookup_elem(&events, &md_key);
     __u32 event_key;
     event *evt;
 
-    if (!md) {
-        return 0;
+    if (unlikely(md == NULL)) {
+        return NULL;
+    }
+    if (unlikely(md->length >=EVENT_BUFFER_SLOTS)) {
+        return NULL;
     }
 
-    event_key = (__u32)(md->head % EVENT_BUFFER_SLOTS);
-    evt = (event *)bpf_map_lookup_elem(&events, &event_key);
-    if (!evt) {
-        return 0;
+    return (event *)bpf_map_lookup_elem(&events, &md->length);
+}
+
+static __always_inline void commit_event() {
+    check_canary();
+
+    __u32 md_key = EVENT_METADATA_SLOT;
+    event_array_md *md = (event_array_md *)bpf_map_lookup_elem(&events, &md_key);
+
+    if (unlikely(md == NULL)) {
+        return;
     }
 
-    md->head += 1;
-    return evt;
+    if (ASSERTS && md->length >= EVENT_BUFFER_SLOTS) {
+        bpf_printk("Tried to commit a buffer slot while the per CPU array was full\n");
+    }
+
+    md->length++;
 }
 
 #endif

@@ -8,11 +8,6 @@ use crate::htdirs;
 pub const CONFIG_JSON: &str = include_str!("../../documentation/docs_usr/config.json");
 pub const ACL_JSON: &str = include_str!("../../documentation/docs_usr/ACL.json");
 
-#[derive(Debug)]
-pub struct LoadedConfig {
-    pub file: ConfigFile,
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ConfigFile {
     pub profile_config: ProfileConfigFile,
@@ -43,7 +38,7 @@ impl Default for ConfigFile {
     }
 }
 
-impl LoadedConfig {
+impl ConfigFile {
     pub fn load() -> Result<Self> {
         validate_environment()?;
 
@@ -55,10 +50,10 @@ impl LoadedConfig {
             )?;
         }
 
-        let file = serde_json::from_str(&fs::read_to_string(config_path)?)
+        let file: Self = serde_json::from_str(&fs::read_to_string(config_path)?)
             .context("Failed to parse ConfigFile")?;
 
-        Ok(LoadedConfig { file })
+        Ok(file)
     }
 }
 

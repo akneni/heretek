@@ -6,7 +6,7 @@ use std::{io, mem};
 use anyhow::{Result, anyhow, bail};
 use aya::{
     Pod,
-    maps::{Map, MapData, PerCpuArray},
+    maps::{Map, MapData, PerCpuArray, PerCpuValues},
 };
 
 use crate::build_params;
@@ -26,6 +26,13 @@ pub struct CEvent {
     pub fpath1: [libc::c_char; 256],
     pub fpath2: [libc::c_char; 256],
     pub spare: [u8; 8],
+}
+
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+struct CEventMetadata {
+    canary: u32,
+    length: u32,
 }
 
 #[repr(C)]
@@ -68,7 +75,6 @@ impl CEvent {
 
 pub struct BpfEventArrayReader {
     map: PerCpuArray<MapData, CEventSlot>,
-    tails: Vec<u64>,
 }
 
 impl BpfEventArrayReader {
@@ -79,67 +85,113 @@ impl BpfEventArrayReader {
         let map_data = MapData::from_pin(map_path)?;
         let map = Map::PerCpuArray(map_data);
         let map = PerCpuArray::try_from(map)?;
-        let mut reader = Self {
-            map,
-            tails: Vec::new(),
-        };
-
-        reader.sync_tails_to_head()?;
-        Ok(reader)
+        Ok(Self { map })
     }
 
     pub fn poll(&mut self, events: &mut Vec<CEvent>) -> Result<(), Box<dyn Error>> {
-        let heads = self.read_heads()?;
+        let metadata = self.read_metadata()?;
 
-        if self.tails.len() != heads.len() {
-            self.tails.resize(heads.len(), 0);
-        }
+        for (cpu, md) in metadata.iter().enumerate() {
+            check_evtmd_canary_asso(md.canary);
 
-        for (cpu, head) in heads.into_iter().enumerate() {
-            if head.saturating_sub(self.tails[cpu]) > EVENT_BUFFER_SLOTS {
-                let dropped = head - self.tails[cpu] - EVENT_BUFFER_SLOTS;
+            let length = if md.length as u64 > EVENT_BUFFER_SLOTS {
+                let dropped = md.length as u64 - EVENT_BUFFER_SLOTS;
                 tracing::warn!("dropped {dropped} event(s) on CPU {cpu}");
-                self.tails[cpu] = head - EVENT_BUFFER_SLOTS;
-            }
+                EVENT_BUFFER_SLOTS as u32
+            } else {
+                md.length
+            };
 
-            while self.tails[cpu] < head {
-                let slot_idx = (self.tails[cpu] % EVENT_BUFFER_SLOTS) as u32;
+            for slot_idx in 0..length {
                 let cpu_slots = self.map.get(&slot_idx, 0)?;
                 let c_event = match unsafe { CEvent::from_bytes(&cpu_slots[cpu].bytes) } {
                     Ok(r) => r,
-                    Err(_e) => {
+                    Err(e) => {
+                        tracing::error!("Failed to build CEvent from eBPF buffer: {e}");
                         continue;
                     }
                 };
 
                 events.push(*c_event);
-
-                self.tails[cpu] += 1;
             }
         }
 
+        self.reset_lengths(&metadata)?;
+
         Ok(())
     }
 
-    fn sync_tails_to_head(&mut self) -> Result<(), Box<dyn Error>> {
-        self.tails = self.read_heads()?;
-        Ok(())
-    }
-
-    fn read_heads(&self) -> Result<Vec<u64>, Box<dyn Error>> {
+    fn read_metadata(&self) -> Result<Vec<CEventMetadata>, Box<dyn Error>> {
         let cpu_values = self.map.get(&EVENT_METADATA_SLOT, 0)?;
         cpu_values
             .iter()
-            .map(parse_head)
+            .map(parse_metadata)
             .collect::<Result<Vec<_>, _>>()
+    }
+
+    fn reset_lengths(&mut self, metadata: &[CEventMetadata]) -> Result<(), Box<dyn Error>> {
+        let mut cpu_values = self
+            .map
+            .get(&EVENT_METADATA_SLOT, 0)?
+            .iter()
+            .copied()
+            .collect::<Vec<_>>();
+
+        for (cpu, slot) in cpu_values.iter_mut().enumerate() {
+            if !metadata.get(cpu).is_some_and(|md| md.length > 0) {
+                continue;
+            }
+
+            let canary = build_params::EVTMD_CANARY as u32;
+            write_metadata(slot, canary, 0)?;
+        }
+
+        self.map
+            .set(EVENT_METADATA_SLOT, PerCpuValues::try_from(cpu_values)?, 0)?;
+        Ok(())
     }
 }
 
-fn parse_head(slot: &CEventSlot) -> Result<u64, Box<dyn Error>> {
-    let bytes: [u8; size_of::<u64>()] = slot
+fn check_evtmd_canary_asso(canary: u32) {
+    if !build_params::ASSERTS {
+        return;
+    }
+
+    if canary != build_params::EVTMD_CANARY as u32 && canary != 0 {
+        tracing::error!(
+            "event metadata canary mismatch: expected {}, got {}",
+            build_params::EVTMD_CANARY,
+            canary
+        );
+    }
+}
+
+fn parse_metadata(slot: &CEventSlot) -> Result<CEventMetadata, Box<dyn Error>> {
+    let canary_bytes: [u8; size_of::<u32>()] = slot
         .bytes
-        .get(..size_of::<u64>())
+        .get(..size_of::<u32>())
         .ok_or_else(|| io::Error::new(io::ErrorKind::UnexpectedEof, "metadata slot too small"))?
         .try_into()?;
-    Ok(u64::from_ne_bytes(bytes))
+    let length_bytes: [u8; size_of::<u32>()] = slot
+        .bytes
+        .get(size_of::<u32>()..size_of::<u32>() * 2)
+        .ok_or_else(|| io::Error::new(io::ErrorKind::UnexpectedEof, "metadata slot too small"))?
+        .try_into()?;
+
+    Ok(CEventMetadata {
+        canary: u32::from_ne_bytes(canary_bytes),
+        length: u32::from_ne_bytes(length_bytes),
+    })
+}
+
+fn write_metadata(slot: &mut CEventSlot, canary: u32, length: u32) -> Result<(), Box<dyn Error>> {
+    slot.bytes
+        .get_mut(..size_of::<u32>())
+        .ok_or_else(|| io::Error::new(io::ErrorKind::UnexpectedEof, "metadata slot too small"))?
+        .copy_from_slice(&canary.to_ne_bytes());
+    slot.bytes
+        .get_mut(size_of::<u32>()..size_of::<u32>() * 2)
+        .ok_or_else(|| io::Error::new(io::ErrorKind::UnexpectedEof, "metadata slot too small"))?
+        .copy_from_slice(&length.to_ne_bytes());
+    Ok(())
 }

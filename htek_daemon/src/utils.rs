@@ -13,9 +13,10 @@ pub fn assert_canonical_asso(fpath: &Path) {
 
 pub fn assert_canonical(fpath: &Path) {
     if let Ok(full_path) = fs::canonicalize(fpath)
-        && full_path != fpath {
-            tracing::error!("assert_canonical failed: {}", fpath.display());
-        }
+        && full_path != fpath
+    {
+        tracing::error!("assert_canonical failed: {}", fpath.display());
+    }
 }
 
 pub fn unreachable() {
@@ -31,6 +32,15 @@ pub fn unreachable() {
 
 /// This functions returns an error or never returns.
 pub fn clean_shutdown(exit_code: i32) -> ! {
+    if build_params::ASSERTS && exit_code != 0 {
+        let bt = Backtrace::force_capture();
+        tracing::error!("Exiting with code {}\n{}", exit_code, bt);
+    } else if exit_code != 0 {
+        tracing::error!("Exiting with code {exit_code}");
+    } else {
+        tracing::info!("Exiting with code {exit_code}");
+    }
+
     if let Err(e) = bpf::unload_all_bpf_obj() {
         tracing::warn!("Error unloading BPF objects on shutdown: {e}");
     }

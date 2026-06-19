@@ -4,7 +4,7 @@ use std::{
     path::PathBuf,
 };
 
-use htek_lib::config::{LoadedConfig, ProfileConfigFile};
+use htek_lib::config::{ConfigFile, ProfileConfigFile};
 
 use crate::{build_params, detection::Acl};
 
@@ -26,8 +26,7 @@ pub struct ProfileConfig {
 }
 
 impl Config {
-    pub fn from(loaded: LoadedConfig, acl: Acl) -> Self {
-        let cfg_file = loaded.file;
+    pub fn from(cfg_file: ConfigFile, acl: Acl) -> Self {
         Self {
             profile_config: ProfileConfig::from(&cfg_file.profile_config),
             quarentine: cfg_file.quarentine,

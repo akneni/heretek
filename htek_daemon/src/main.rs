@@ -28,7 +28,7 @@ fn preflight() -> Result<Config> {
         bail!("root privilages required");
     }
 
-    let loaded = htek_lib::config::LoadedConfig::load().context("Failed to load config")?;
+    let loaded = htek_lib::config::ConfigFile::load().context("Failed to load config")?;
     let acl_path = htdirs::acl_path();
     let acl = Acl::from_acl_file(&acl_path).context("Failed to parse ACL")?;
 
@@ -99,6 +99,7 @@ fn main() {
     tracing::info!("htekd started successfully. Entering main loop../");
     loop {
         counter += 1;
+
         let timer = Instant::now();
         ttracker.start_iter();
 
@@ -123,6 +124,7 @@ fn main() {
             }
         }
         events = vec![];
+
         if timer.elapsed() >= iter_interval {
             tracing::warn!(
                 "Interval {} too long {:?} (skipping RPC handling & maintenence steps)",
@@ -135,6 +137,8 @@ fn main() {
         // 3) Do misc maintenence things
         pgraph_db.check_unchained_chains_asso();
         pgraph_db.check_cycles_asso();
+        pgraph_db.check_killed_children_asso();
+
         if counter.is_multiple_of(8)
             && let Err(e) = rpc_server.heal_sockets()
         {

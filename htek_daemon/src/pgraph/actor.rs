@@ -8,6 +8,7 @@ use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};
 
 use crate::{
+    build_params,
     detection::{PolicyVerdict, Protectee},
     pgraph::{AccessType, Event, EventArgs},
     uinterf::Config,
@@ -21,10 +22,11 @@ pub struct ActorTuid {
     pub start_ktime: u64,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ActorState {
     Running,
     Exited,
+    KilledByHtekd,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -154,6 +156,29 @@ impl Actor {
             0 => true,
             1 => self.actor_md.profile.contains("unchained"),
             _ => false,
+        }
+    }
+
+    pub fn set_state(&mut self, state: ActorState) {
+        let old_state = self.actor_md.state;
+        let new_state = state;
+
+        self.actor_md.state = new_state;
+        if !build_params::ASSERTS {
+            return;
+        }
+
+        match (old_state, new_state) {
+            (ActorState::Exited, ActorState::Exited) => {
+                tracing::error!("Tried to mark an already exited actor as exited.");
+            }
+            (ActorState::KilledByHtekd, ActorState::KilledByHtekd) => {
+                tracing::error!("Tried to mark an already killed actor as killed.");
+            }
+            (ActorState::KilledByHtekd, ActorState::Exited) => {
+                tracing::error!("Tried to mark an already killed actor as exited.");
+            }
+            _ => {}
         }
     }
 }

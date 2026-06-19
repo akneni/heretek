@@ -1,5 +1,7 @@
 # Users should not change this file. This contains defaults for all build parameters.
-# If you want to change a build parameter, override the default in ../build-params.toml.
+# If you want to change a build parameter, set HTEK_BP_<param-name> to the desired value
+# Ex) `export HTEK_HB_RING_BUF_SIZE_LOG2=20`
+# Then run `make build`
 
 
 # Size of the per-core ring buffers used to stream events from eBPF to the daemon.
@@ -9,9 +11,15 @@ RING_BUF_SIZE_LOG2=14
 # Relevant only to the daemon
 # Enable asserts?
 # Generally only used for develompent/debugging purposes
-ASSERTS=true
+ASSERTS=false
 
 # Relevant only to the daemon
 # Enable performance tracking?
 # Generally only used for develompent/debugging purposes
 PERF_TRACKING=false
+
+# Random numbers used to detect eBPF buffer overflow
+# Only used when ASSERTS = true
+# There's no reason you should need to change these
+EVTMD_CANARY=872350975
+PARAM_CANARY=316853044

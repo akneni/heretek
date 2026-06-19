@@ -8,11 +8,12 @@ use rustix::process::Signal;
 use crate::{
     build_params,
     detection::PolicyVerdict,
-    pgraph::{ActorTuid, PGraph, PGraphNode},
+    pgraph::{ActorState, ActorTuid, PGraph, PGraphNode},
     uinterf::{Config, IncFile},
+    utils,
 };
 
-pub fn handle_response(config: &Config, pgraph_db: &PGraph, violations: &[PolicyVerdict]) {
+pub fn handle_response(config: &Config, pgraph_db: &mut PGraph, violations: &[PolicyVerdict]) {
     let violating_tuids = violations
         .iter()
         .filter_map(|violation| {
@@ -80,6 +81,10 @@ pub fn handle_response(config: &Config, pgraph_db: &PGraph, violations: &[Policy
             }
         };
 
+        if let ActorState::KilledByHtekd = node.actor.actor_md.state {
+            continue;
+        }
+
         tracing::info!("Process Flagged! {}", node.to_str(1));
 
         if config.quarentine.contains(&"log".to_string())
@@ -98,7 +103,7 @@ pub fn handle_response(config: &Config, pgraph_db: &PGraph, violations: &[Policy
             notify(node);
         }
         if config.quarentine.contains(&"terminate".to_string()) {
-            terminate(config, pgraph_db, node);
+            terminate(config, pgraph_db, evil_root);
         }
     }
 }
@@ -227,7 +232,14 @@ fn is_descendant_of(pgraph_db: &PGraph, child_tuid: ActorTuid, root_tuid: ActorT
     false
 }
 
-fn terminate(_config: &Config, pgraph_db: &PGraph, evil_root: &PGraphNode) {
+fn terminate(_config: &Config, pgraph_db: &mut PGraph, evil_root_id: &ActorTuid) {
+    let evil_root = match pgraph_db.nodes.get_mut(evil_root_id) {
+        Some(r) => r,
+        None => {
+            utils::unreachable();
+            return;
+        }
+    };
     let mut to_kill = evil_root.child_tuids.clone();
 
     let pid = match rustix::process::Pid::from_raw(evil_root.actor.id.pid) {
@@ -238,11 +250,12 @@ fn terminate(_config: &Config, pgraph_db: &PGraph, evil_root: &PGraphNode) {
         }
     };
     let _ = rustix::process::kill_process(pid, Signal::KILL);
+    evil_root.actor.set_state(ActorState::KilledByHtekd);
 
     while !to_kill.is_empty() {
         let mut to_kill_childs = HashSet::new();
         for tuid in to_kill.iter() {
-            let node = match pgraph_db.nodes.get(tuid) {
+            let node = match pgraph_db.nodes.get_mut(tuid) {
                 Some(r) => r,
                 None => continue,
             };
@@ -259,6 +272,7 @@ fn terminate(_config: &Config, pgraph_db: &PGraph, evil_root: &PGraphNode) {
                 }
             };
             let _ = rustix::process::kill_process(pid, Signal::KILL);
+            node.actor.set_state(ActorState::KilledByHtekd);
         }
         to_kill = to_kill_childs;
     }

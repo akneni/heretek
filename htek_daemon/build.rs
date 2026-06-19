@@ -1,4 +1,4 @@
-use std::{collections::HashMap, fs, process};
+use std::{collections::HashMap, env, fs, process};
 
 fn parse_build_param_str(toml: &str, params: &mut HashMap<String, String>) {
     for line in toml.split('\n') {
@@ -17,6 +17,13 @@ fn load_build_params() -> HashMap<String, String> {
 
     let bp_str = fs::read_to_string("build-params.toml").expect("build-params.toml can't be read");
     parse_build_param_str(&bp_str, &mut build_params);
+
+    for (k, v) in build_params.iter_mut() {
+        let target_envvar = format!("HTEK_BP_{}", k);
+        if let Ok(k) = env::var(&target_envvar) {
+            *v = k;
+        }
+    }
 
     build_params
 }
@@ -45,7 +52,7 @@ fn rs_infer_type(key: &str, value: &str) -> &'static str {
 fn generate_const_rs(build_params: &HashMap<String, String>) {
     let filename = "src/build_params.rs";
 
-    let mut payload = String::new();
+    let mut payload = "#![allow(unused)]\n".to_string();
     for (k, v) in build_params.iter() {
         let type_str = rs_infer_type(k, v);
         payload.push_str(&format!("pub const {}: {} = {};\n", k, type_str, v));
