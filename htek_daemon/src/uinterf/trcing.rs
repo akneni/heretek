@@ -2,6 +2,7 @@ use anyhow::Result;
 use std::fmt::{Debug, Display, Write as FmtWrite};
 use std::fs::File;
 use std::io::Write as IoWrite;
+use std::path::PathBuf;
 use std::time::Instant;
 
 use crate::pgraph::PGraph;
@@ -11,6 +12,8 @@ use htek_lib::htdirs;
 /// detect a broken invarient in PGraph), this structure is used to create a file that we can
 /// dump our state into to help us debug it easier.
 pub struct IncFile {
+    desc: String,
+    path: PathBuf,
     fp: File,
     timer: Instant,
 }
@@ -26,7 +29,12 @@ impl IncFile {
             .truncate(true)
             .write(true)
             .open(&inc_path)?;
-        let mut inc_file = Self { fp, timer };
+        let mut inc_file = Self {
+            desc: desc.to_string(),
+            path: inc_path,
+            fp,
+            timer,
+        };
 
         writeln!(inc_file.fp, "INCIDENT: {}\n\n\n", desc)?;
 
@@ -75,6 +83,11 @@ impl IncFile {
 
 impl Drop for IncFile {
     fn drop(&mut self) {
+        tracing::error!(
+            "Incident File Created at {} | {}",
+            self.path.display(),
+            self.desc
+        );
         let _ = writeln!(
             self.fp,
             "Time Elapsed Creating Incident file: {:?}\n",

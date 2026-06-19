@@ -162,13 +162,15 @@ impl PGraph {
             }
         };
         creator.child_tuids.insert(actor.id);
-        let unchained_chain = creator.unchained_chain && actor.actor_md.profile.is_empty();
-        let cwd = creator.actor.actor_md.cwd.clone();
 
         // Make Child actor inheric creator's child profiles
         for prof in creator.actor.actor_md.child_profile.iter() {
             actor.actor_md.profile.insert(prof.clone());
         }
+
+        // Hnadle unchained chain
+        let unchained_chain = creator.unchained_chain && actor.actor_md.profile.is_empty();
+        let cwd = creator.actor.actor_md.cwd.clone();
 
         // Update pid map
         let entry = self.pid_map.entry(actor.id.pid);
