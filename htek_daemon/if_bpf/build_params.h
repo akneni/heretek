@@ -1,5 +1,5 @@
-#define RING_BUF_SIZE_LOG2 (14)
-#define EVTMD_CANARY (872350975)
 #define PARAM_CANARY (316853044)
+#define EVTMD_CANARY (872350975)
 #define ASSERTS (false)
+#define RING_BUF_SIZE_LOG2 (14)
 #define PERF_TRACKING (false)
