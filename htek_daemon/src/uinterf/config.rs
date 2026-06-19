@@ -20,6 +20,8 @@ pub struct Config {
 #[derive(Debug, Clone)]
 pub struct ProfileConfig {
     default: String,
+
+    // {profile_name: Set[binaries with that profile]}
     mappings: HashMap<String, HashSet<PathBuf>>,
 }
 
@@ -53,6 +55,10 @@ impl ProfileConfig {
             default: cfg_file.default.clone(),
             mappings,
         }
+    }
+
+    pub fn profile_exists(&self, profile: &str) -> bool {
+        self.mappings.contains_key(profile)
     }
 }
 

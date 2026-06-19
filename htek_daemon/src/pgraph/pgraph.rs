@@ -1,7 +1,7 @@
 use std::{
     collections::{HashMap, HashSet, VecDeque},
     fmt::Write as FmtWrite,
-    fs, io, process,
+    fs, io,
     time::Instant,
 };
 
@@ -9,6 +9,7 @@ use crate::{
     build_params,
     pgraph::{Actor, ActorState, ActorTuid},
     uinterf::{Config, IncFile},
+    utils,
 };
 
 /// This type represents the bare minimum metadata of each actor/process.
@@ -155,7 +156,7 @@ impl PGraph {
             None => {
                 if build_params::ASSERTS {
                     tracing::error!("insert_actor called with a creator_tuid that doesn't exist");
-                    process::exit(1);
+                    utils::clean_shutdown(1);
                 }
                 return;
             }
@@ -342,14 +343,15 @@ impl PGraph {
                 Ok(r) => r,
                 Err(e) => {
                     tracing::error!("Failed to create incident file: {e}");
-                    process::exit(1);
+                    utils::clean_shutdown(1);
                 }
             };
 
             let _ = inc_file.dmp_stacktrace();
             let _ = inc_file.dmp_debugable("Errors", &errors);
             let _ = inc_file.dmp_pgraph(self);
-            process::exit(1);
+            drop(inc_file);
+            utils::clean_shutdown(1);
         }
 
         if build_params::PERF_TRACKING {
@@ -404,14 +406,15 @@ impl PGraph {
                 Ok(r) => r,
                 Err(e) => {
                     tracing::error!("Failed to create incident file: {e}");
-                    process::exit(1);
+                    utils::clean_shutdown(1);
                 }
             };
 
             let _ = inc_file.dmp_stacktrace();
             let _ = inc_file.dmp_debugable("Errors", &errors);
             let _ = inc_file.dmp_pgraph(self);
-            process::exit(1);
+            drop(inc_file);
+            utils::clean_shutdown(1);
         }
 
         if build_params::PERF_TRACKING {

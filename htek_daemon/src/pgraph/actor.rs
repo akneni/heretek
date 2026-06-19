@@ -2,14 +2,12 @@ use std::{
     collections::{HashMap, HashSet},
     fs,
     path::{Path, PathBuf},
-    process,
 };
 
 use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    build_params,
     detection::{PolicyVerdict, Protectee},
     pgraph::{AccessType, Event, EventArgs},
     uinterf::Config,
@@ -195,16 +193,8 @@ impl Actor {
                 }
                 PolicyVerdict::Benign
             }
-            EventArgs::Start {
-                #[allow(unused)]
-                creator_pid,
-            } => {
-                if build_params::ASSERTS {
-                    tracing::error!("This codepath should not be reachable.");
-                    process::exit(1);
-                } else {
-                    tracing::warn!("This codepath should not be reachable.");
-                }
+            EventArgs::Start { .. } => {
+                utils::unreachable();
                 PolicyVerdict::Benign
             }
         }

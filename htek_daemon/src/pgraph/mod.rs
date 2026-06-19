@@ -3,8 +3,6 @@ mod event;
 #[allow(clippy::module_inception)]
 mod pgraph;
 
-use std::process;
-
 pub use actor::*;
 use anyhow::Result;
 pub use event::*;
@@ -37,7 +35,7 @@ pub fn handle_event(config: &Config, pgraph: &mut PGraph, cevent: &CEvent) -> Re
                     None => {
                         tracing::warn!("Unknown Creator Process for ({:?})", (event));
                         if build_params::ASSERTS {
-                            process::exit(1);
+                            utils::clean_shutdown(1);
                         }
                         return Ok(());
                     }

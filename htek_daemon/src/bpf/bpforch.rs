@@ -55,7 +55,7 @@ pub fn load_bpf_obj(_config: &Config) -> Result<()> {
 
 /// Unloads all eBPF objects
 /// Does *not* raise an error if an object to be unloaded cannot be found.
-pub fn unload_all_bpf_obj(_config: &Config) -> Result<()> {
+pub fn unload_all_bpf_obj() -> Result<()> {
     let prog_pin_dir = Path::new("/sys/fs/bpf/heretek");
     let map_pin_dir = Path::new("/sys/fs/bpf/heretek-maps");
 

@@ -24,7 +24,7 @@ pub enum Rpc {
 pub enum RpcResult {
     GetSummary(String),
     SetProfileRes { msg: String, success: bool },
-    SetChildProfileRes { msg: String, success: bool },
+    SetChildProfileRes,
     TouchedRes(String),
     DebugActionRes(String),
     Error(String),

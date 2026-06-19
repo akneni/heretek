@@ -1,6 +1,6 @@
 mod uds;
 
-use std::{fmt::Write, path::PathBuf, process};
+use std::{fmt::Write, path::PathBuf};
 
 use crate::{
     build_params,
@@ -73,22 +73,25 @@ pub fn handle_rpc(
             }
         }
         Rpc::SetChildProfile { pid, profiles } => {
+            for p in profiles.iter() {
+                if !config.profile_config.profile_exists(p) {
+                    bail!("Profile {p} doesn't exist");
+                }
+            }
+
             let node = pgraph_db
                 .get_latest_mut(pid)
                 .ok_or(anyhow!("Process with PID {} not found", pid))?;
+
             for p in profiles.iter() {
                 node.actor.actor_md.child_profile.insert(p.clone());
             }
 
-            RpcResult::SetChildProfileRes {
-                msg: "".to_string(),
-                success: true,
-            }
+            RpcResult::SetChildProfileRes
         }
         Rpc::Bringdown => {
             tracing::info!("Received shutdown request. Exiting cleanly.");
-            utils::clean_shutdown(config)?;
-            process::exit(0);
+            utils::clean_shutdown(0);
         }
         Rpc::Touched { file } => handle_touched(pgraph_db, file),
         Rpc::DebugAction => {

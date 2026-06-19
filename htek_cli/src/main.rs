@@ -308,6 +308,7 @@ fn spawn_as_profile(
 ) -> Result<()> {
     // Sets the profile if one is provides
     if let Some(profile) = profile {
+        dbg!(&profile);
         let mut profiles = HashSet::new();
         profiles.insert(profile);
 
@@ -319,12 +320,16 @@ fn spawn_as_profile(
         };
 
         let res = client.call_rpc_sync(req)?;
-        if let RpcResult::SetChildProfileRes { msg, success } = res {
-            if !success {
-                bail!(msg);
+        match &res {
+            RpcResult::SetChildProfileRes => {
+                // Ok
             }
-        } else {
-            bail!("unknown result");
+            RpcResult::Error(s) => {
+                bail!("{s}");
+            }
+            _ => {
+                bail!("Unexpected response from daemon");
+            }
         }
     }
 

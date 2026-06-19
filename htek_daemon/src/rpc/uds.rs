@@ -36,7 +36,7 @@ impl RpcServer {
             fs::remove_file(&apath)?;
         }
 
-        let root_uds = UnixListener::bind(&rpath).unwrap();
+        let root_uds = UnixListener::bind(&rpath)?;
         let any_uds = UnixListener::bind(&apath)?;
 
         fs::set_permissions(&rpath, Permissions::from_mode(0o600))?;

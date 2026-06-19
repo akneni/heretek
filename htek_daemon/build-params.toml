@@ -9,7 +9,7 @@ RING_BUF_SIZE_LOG2=14
 # Relevant only to the daemon
 # Enable asserts?
 # Generally only used for develompent/debugging purposes
-ASSERTS=false
+ASSERTS=true
 
 # Relevant only to the daemon
 # Enable performance tracking?

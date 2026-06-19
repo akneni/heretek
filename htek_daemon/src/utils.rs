@@ -1,9 +1,8 @@
 use std::{backtrace::Backtrace, fs, path::Path, process};
 
-use anyhow::Result;
 use htek_lib::htdirs;
 
-use crate::{bpf, build_params, uinterf::Config};
+use crate::{bpf, build_params};
 
 /// Assert Canonical Path ASSERTS = true only
 pub fn assert_canonical_asso(fpath: &Path) {
@@ -14,7 +13,9 @@ pub fn assert_canonical_asso(fpath: &Path) {
 
 pub fn assert_canonical(fpath: &Path) {
     if let Ok(full_path) = fs::canonicalize(fpath) {
-        assert_eq!(full_path, fpath);
+        if full_path != fpath {
+            tracing::error!("assert_canonical failed: {}", fpath.display());
+        }
     }
 }
 
@@ -23,15 +24,17 @@ pub fn unreachable() {
         let bt = Backtrace::force_capture();
         let msg = format!("Reached an unreachable section of code:\n{}", bt);
         tracing::error!(msg);
-        process::exit(1);
+        clean_shutdown(1);
     } else {
         tracing::error!("Reached an unreachable section of code");
     }
 }
 
 /// This functions returns an error or never returns.
-pub fn clean_shutdown(config: &Config) -> Result<()> {
-    bpf::unload_all_bpf_obj(config)?;
+pub fn clean_shutdown(exit_code: i32) -> ! {
+    if let Err(e) = bpf::unload_all_bpf_obj() {
+        tracing::warn!("Error unloading BPF objects on shutdown: {e}");
+    }
 
     if let Err(e) = fs::remove_file(htdirs::socket_path_root()) {
         tracing::warn!("Failed to clean up UDS file on exit: {e}");
@@ -41,5 +44,5 @@ pub fn clean_shutdown(config: &Config) -> Result<()> {
         tracing::warn!("Failed to clean up UDS file on exit: {e}");
     }
 
-    process::exit(0);
+    process::exit(exit_code);
 }

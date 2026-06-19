@@ -1,6 +1,6 @@
 use std::{
     fs::File,
-    process, thread,
+    thread,
     time::{Duration, Instant},
 };
 
@@ -50,7 +50,7 @@ fn daemon_init(config: &Config) -> Result<(RpcServer, BpfEventArrayReader)> {
         .with(tracing_subscriber::fmt::layer().with_writer(trc_fp))
         .init();
 
-    bpf::unload_all_bpf_obj(config)?;
+    bpf::unload_all_bpf_obj()?;
     bpf::load_bpf_obj(config)?;
 
     let bpf_reader = bpf::BpfEventArrayReader::from_pinned_path("/sys/fs/bpf/heretek-maps/events");
@@ -76,7 +76,7 @@ fn main() {
         Ok(r) => r,
         Err(e) => {
             tracing::error!("Preflight Checks Failed:\n{}", e);
-            process::exit(1);
+            utils::clean_shutdown(1);
         }
     };
 
@@ -85,7 +85,7 @@ fn main() {
         Ok(r) => r,
         Err(e) => {
             tracing::error!("An error occured while initalizing the daemon: {e}");
-            process::exit(1);
+            utils::clean_shutdown(1);
         }
     };
 
