@@ -37,5 +37,9 @@ pub fn clean_shutdown(config: &Config) -> Result<()> {
         tracing::warn!("Failed to clean up UDS file on exit: {e}");
     }
 
+    if let Err(e) = fs::remove_file(htdirs::socket_path_any()) {
+        tracing::warn!("Failed to clean up UDS file on exit: {e}");
+    }
+
     process::exit(0);
 }

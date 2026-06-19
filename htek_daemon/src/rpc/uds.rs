@@ -28,7 +28,15 @@ impl RpcServer {
 
         let rpath = htdirs::socket_path_root();
         let apath = htdirs::socket_path_any();
-        let root_uds = UnixListener::bind(&rpath)?;
+
+        if rpath.exists() {
+            fs::remove_file(&rpath)?;
+        }
+        if apath.exists() {
+            fs::remove_file(&apath)?;
+        }
+
+        let root_uds = UnixListener::bind(&rpath).unwrap();
         let any_uds = UnixListener::bind(&apath)?;
 
         fs::set_permissions(&rpath, Permissions::from_mode(0o600))?;
