@@ -135,11 +135,10 @@ fn main() {
         // 3) Do misc maintenence things
         pgraph_db.check_unchained_chains_asso();
         pgraph_db.check_cycles_asso();
-        if counter % 8 == 0 {
-            if let Err(e) = rpc_server.heal_sockets() {
+        if counter.is_multiple_of(8)
+            && let Err(e) = rpc_server.heal_sockets() {
                 tracing::error!("An error occured recreating sockets: {e}");
             }
-        }
 
         // 4) Check for IPC RPCs from CLI invocations of this tool (like `htek desc <pid>`)
         let res = rpc_server.handle_rpc(|rpcobj, is_root| {
@@ -153,7 +152,7 @@ fn main() {
         let te = timer.elapsed().as_micros() as u64;
         ttracker.end_iter();
 
-        if counter % 8 == 0 && build_params::PERF_TRACKING {
+        if counter.is_multiple_of(8) && build_params::PERF_TRACKING {
             ttracker.display_stats();
         }
 

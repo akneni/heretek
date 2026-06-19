@@ -12,11 +12,10 @@ pub fn assert_canonical_asso(fpath: &Path) {
 }
 
 pub fn assert_canonical(fpath: &Path) {
-    if let Ok(full_path) = fs::canonicalize(fpath) {
-        if full_path != fpath {
+    if let Ok(full_path) = fs::canonicalize(fpath)
+        && full_path != fpath {
             tracing::error!("assert_canonical failed: {}", fpath.display());
         }
-    }
 }
 
 pub fn unreachable() {
