@@ -80,6 +80,8 @@ pub fn handle_response(config: &Config, pgraph_db: &PGraph, violations: &[Policy
             }
         };
 
+        tracing::info!("Process Flagged! {}", node.to_str(1));
+
         if config.quarentine.contains(&"log".to_string())
             && let Err(e) = log(
                 config,

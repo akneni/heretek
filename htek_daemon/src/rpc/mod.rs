@@ -133,7 +133,7 @@ fn handle_set_profile(
 }
 
 fn handle_touched(pgraph_db: &mut PGraph, fpath: PathBuf) -> RpcResult {
-    utils::assert_canonical_dbgo(&fpath);
+    utils::assert_canonical_asso(&fpath);
 
     let mut payload = String::new();
     for (_, node) in pgraph_db.nodes.iter() {

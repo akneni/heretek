@@ -291,7 +291,7 @@ fn init_htekdirs() -> Result<()> {
 
     fs::write(
         &mfile,
-        "This file prevents collitions on the name heretek. Ignore it but dont delete it.",
+        "This file prevents collisions on the name heretek. Ignore it but don't delete it.",
     )?;
     fs::set_permissions(&mfile, Permissions::from_mode(0o644))?;
 

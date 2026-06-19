@@ -216,7 +216,7 @@ impl Actor {
         fpath: &Path,
         mode: AccessType,
     ) -> PolicyVerdict {
-        utils::assert_canonical_dbgo(fpath);
+        utils::assert_canonical_asso(fpath);
 
         let protectee = Protectee::File(fpath.to_path_buf());
 
@@ -227,7 +227,7 @@ impl Actor {
     }
 
     pub fn handle_connect_uds(&mut self, config: &Config, fpath: &Path) -> PolicyVerdict {
-        utils::assert_canonical_dbgo(fpath);
+        utils::assert_canonical_asso(fpath);
 
         let protectee = Protectee::File(fpath.to_path_buf());
         let mode = const { AccessType::from_rwxbc_str_const("----c") };

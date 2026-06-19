@@ -279,8 +279,8 @@ impl PGraph {
 
     /// Checks that all nodes with unchained_chain = true are really unchaned
     /// and checks that the same is true for all it's parents.
-    /// This function does nothing and is compiled out in release builds
-    pub fn check_unchained_chains_dbgo(&self) {
+    /// This function does nothing and is compiled out if the ASSERTS feature is turned off
+    pub fn check_unchained_chains_asso(&self) {
         if !build_params::ASSERTS {
             return;
         }
@@ -360,7 +360,7 @@ impl PGraph {
         }
     }
 
-    pub fn check_cycles_dbgo(&self) {
+    pub fn check_cycles_asso(&self) {
         if !build_params::ASSERTS {
             return;
         }

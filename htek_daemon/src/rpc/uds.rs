@@ -89,6 +89,25 @@ impl RpcServer {
         Ok(())
     }
 
+    pub fn heal_sockets(&mut self) -> Result<()> {
+        let rpath = htdirs::socket_path_root();
+        let apath = htdirs::socket_path_any();
+
+        if !rpath.exists() {
+            tracing::warn!("Root UDS not found. Recreating socket.");
+            let rsocket = UnixListener::bind(&rpath)?;
+            self.root_uds = rsocket;
+        }
+
+        if !rpath.exists() {
+            tracing::warn!("Any UDS not found. Recreating socket.");
+            let asocket = UnixListener::bind(&apath)?;
+            self.any_uds = asocket;
+        }
+
+        Ok(())
+    }
+
     pub fn setup_uds_dir() -> Result<()> {
         let udsdir = htdirs::uds_dir();
         fs::create_dir_all(udsdir)?;

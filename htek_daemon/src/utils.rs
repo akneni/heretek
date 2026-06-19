@@ -5,8 +5,8 @@ use htek_lib::htdirs;
 
 use crate::{bpf, build_params, uinterf::Config};
 
-/// Assert Canonical Path Debug Only
-pub fn assert_canonical_dbgo(fpath: &Path) {
+/// Assert Canonical Path ASSERTS = true only
+pub fn assert_canonical_asso(fpath: &Path) {
     if build_params::ASSERTS {
         assert_canonical(fpath);
     }

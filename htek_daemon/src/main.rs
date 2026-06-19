@@ -94,9 +94,11 @@ fn main() {
 
     let iter_interval = Duration::from_micros(50_000);
     let mut ttracker = perftracker::PerfTracker::new();
+    let mut counter: u64 = 0;
 
     tracing::info!("htekd started successfully. Entering main loop../");
     loop {
+        counter += 1;
         let timer = Instant::now();
         ttracker.start_iter();
 
@@ -121,30 +123,39 @@ fn main() {
             }
         }
         events = vec![];
+        if timer.elapsed() >= iter_interval {
+            tracing::warn!(
+                "Interval {} too long {:?} (skipping RPC handling & maintenence steps)",
+                counter,
+                timer.elapsed()
+            );
+            continue;
+        }
 
-        // 3) Check for IPC RPCs from CLI invocations of this tool (like `htek desc <pid>`)
-        // if let Err(e) = rpc::handle_rpc(&config, &mut pgraph_db, &socket) {
-        //     tracing::warn!("Error processing RPC: {e}");
-        // }
+        // 3) Do misc maintenence things
+        pgraph_db.check_unchained_chains_asso();
+        pgraph_db.check_cycles_asso();
+        if counter % 8 == 0 {
+            if let Err(e) = rpc_server.heal_sockets() {
+                tracing::error!("An error occured recreating sockets: {e}");
+            }
+        }
 
+        // 4) Check for IPC RPCs from CLI invocations of this tool (like `htek desc <pid>`)
         let res = rpc_server.handle_rpc(|rpcobj, is_root| {
             rpc::handle_rpc(&config, &mut pgraph_db, rpcobj, is_root)
         });
-
         if let Err(e) = res {
             tracing::warn!("{e}");
         }
 
-        // 4) Sleep for an alloted amount of time.
+        // 5) Sleep for an alloted amount of time.
         let te = timer.elapsed().as_micros() as u64;
         ttracker.end_iter();
 
-        if ttracker.total_iterations.is_multiple_of(10) && build_params::PERF_TRACKING {
+        if counter % 8 == 0 && build_params::PERF_TRACKING {
             ttracker.display_stats();
         }
-
-        pgraph_db.check_unchained_chains_dbgo();
-        pgraph_db.check_cycles_dbgo();
 
         let iter_interval_us = iter_interval.as_micros() as u64;
         if te >= iter_interval_us {
