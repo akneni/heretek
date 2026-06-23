@@ -117,6 +117,7 @@ static __always_inline void commit_event(const event* evt) {
     __u32 md_key = EVENT_BUFFER_SLOTS + cpuid;
     event_array_md *md = (event_array_md *)bpf_map_lookup_elem(&events, &md_key);
     __u32 next_head;
+    barrier();
 
     if (unlikely(md == NULL)) {
         return;

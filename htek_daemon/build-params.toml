@@ -1,6 +1,6 @@
 # Users should not change this file. This contains defaults for all build parameters.
 # If you want to change a build parameter, set HTEK_BP_<param-name> to the desired value
-# Ex) `export HTEK_HB_RING_BUF_SIZE_LOG2=20`
+# Ex) `export HTEK_BP_RING_BUF_SIZE_LOG2=20`
 # Then run `make build`
 
 
@@ -22,5 +22,3 @@ PERF_TRACKING=false
 # Only used when ASSERTS = true
 # There's no reason you should need to change these
 CANARY=872350975
-
-NUM_CORES=32

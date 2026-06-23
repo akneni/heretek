@@ -1,4 +1,4 @@
-use std::{collections::HashMap, env, fs, process};
+use std::{collections::HashMap, env, fs, process, thread};
 
 fn parse_build_param_str(toml: &str, params: &mut HashMap<String, String>) {
     for line in toml.split('\n') {
@@ -17,6 +17,11 @@ fn load_build_params() -> HashMap<String, String> {
 
     let bp_str = fs::read_to_string("build-params.toml").expect("build-params.toml can't be read");
     parse_build_param_str(&bp_str, &mut build_params);
+
+    match thread::available_parallelism() {
+        Ok(cores) => build_params.insert("NUM_CORES".to_string(), format!("{}", cores)),
+        Err(e) => panic!("Failed to get core count: {}", e),
+    };
 
     for (k, v) in build_params.iter_mut() {
         let target_envvar = format!("HTEK_BP_{}", k);
@@ -108,7 +113,17 @@ fn main() {
     println!("cargo:rerun-if-changed=build-params.toml");
     println!("cargo:rerun-if-changed=src/bpf/cbpfmap.c");
 
+    watch_envs();
+
     let build_params = load_build_params();
     generate_consts(&build_params);
     build_cbpfmap();
+}
+
+fn watch_envs() {
+    println!("cargo:rerun-if-env-changed=HTEK_BP_RING_BUF_SIZE_LOG2");
+    println!("cargo:rerun-if-env-changed=HTEK_BP_ASSERTS");
+    println!("cargo:rerun-if-env-changed=HTEK_BP_PERF_TRACKING");
+    println!("cargo:rerun-if-env-changed=HTEK_BP_CANARY");
+    println!("cargo:rerun-if-env-changed=HTEK_BP_NUM_CORES");
 }
