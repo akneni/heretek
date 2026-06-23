@@ -126,6 +126,7 @@ fn main() {
         events = vec![];
 
         if timer.elapsed() >= iter_interval {
+            ttracker.end_iter();
             tracing::warn!(
                 "Interval {} too long {:?} (skipping RPC handling & maintenence steps)",
                 counter,

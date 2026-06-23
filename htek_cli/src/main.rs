@@ -163,10 +163,16 @@ fn install_from_repo() -> Result<()> {
         let fname = file.file_name();
         let fname = fname.to_str().unwrap();
 
+        if file.file_type()?.is_dir() {
+            continue;
+        }
+
         let dest = if matches!(fname, "htek" | "htekd") {
             Path::new("/").join("usr").join("bin").join(fname)
         } else if fname.ends_with(".ebpf.o") {
             bpf_dir.join(fname)
+        } else if fname.ends_with(".log") {
+            continue;
         } else {
             bail!("unknown file type: {}", file.path().display());
         };

@@ -20,10 +20,22 @@ fn load_build_params() -> HashMap<String, String> {
 
     for (k, v) in build_params.iter_mut() {
         let target_envvar = format!("HTEK_BP_{}", k);
-        if let Ok(k) = env::var(&target_envvar) {
-            *v = k;
+
+        match env::var(&target_envvar) {
+            Ok(r) => *v = r,
+            Err(e) => {
+                if format!("{e}").contains("environment variable not found") {
+                    continue;
+                }
+                panic!("{e} ({})", target_envvar);
+            }
         }
     }
+
+    let _ = fs::write("../build/build_params.log", format!("{:#?}", build_params));
+
+    let envs: Vec<(String, String)> = env::vars().collect();
+    let _ = fs::write("../build/seen_envs.log", format!("{:#?}", envs));
 
     build_params
 }
@@ -82,7 +94,21 @@ fn generate_consts(build_params: &HashMap<String, String>) {
     generate_const_c(build_params);
 }
 
+fn build_cbpfmap() {
+    cc::Build::new()
+        .compiler("clang")
+        .opt_level(2)
+        .file("src/bpf/cbpfmap.c")
+        .compile("cbpfmap");
+
+    println!("cargo:rustc-link-lib=bpf");
+}
+
 fn main() {
+    println!("cargo:rerun-if-changed=build-params.toml");
+    println!("cargo:rerun-if-changed=src/bpf/cbpfmap.c");
+
     let build_params = load_build_params();
     generate_consts(&build_params);
+    build_cbpfmap();
 }

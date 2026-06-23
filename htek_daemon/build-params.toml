@@ -6,7 +6,7 @@
 
 # Size of the per-core ring buffers used to stream events from eBPF to the daemon.
 # Note that is in terms of powers of 2. So 7 means that the ring buf size is (2^7) = 128
-RING_BUF_SIZE_LOG2=14
+RING_BUF_SIZE_LOG2=19
 
 # Relevant only to the daemon
 # Enable asserts?
@@ -18,8 +18,9 @@ ASSERTS=false
 # Generally only used for develompent/debugging purposes
 PERF_TRACKING=false
 
-# Random numbers used to detect eBPF buffer overflow
+# Random number used to detect eBPF buffer overflow
 # Only used when ASSERTS = true
 # There's no reason you should need to change these
-EVTMD_CANARY=872350975
-PARAM_CANARY=316853044
+CANARY=872350975
+
+NUM_CORES=32

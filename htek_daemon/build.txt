@@ -1,0 +1,7 @@
+{
+    "PERF_TRACKING": "false",
+    "RING_BUF_SIZE_LOG2": "19",
+    "ASSERTS": "false",
+    "NUM_CORES": "32",
+    "CANARY": "872350975",
+}
