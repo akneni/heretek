@@ -38,10 +38,6 @@ fn load_build_params() -> HashMap<String, String> {
     }
 
     let _ = fs::write("../build/build_params.log", format!("{:#?}", build_params));
-
-    let envs: Vec<(String, String)> = env::vars().collect();
-    let _ = fs::write("../build/seen_envs.log", format!("{:#?}", envs));
-
     build_params
 }
 

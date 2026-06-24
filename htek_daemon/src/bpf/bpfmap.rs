@@ -8,6 +8,10 @@ use anyhow::{Result, bail};
 
 use crate::build_params::{self, NUM_CORES};
 
+const fn asserts_enabled() -> usize {
+    if build_params::ASSERTS { 1 } else { 0 }
+}
+
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub struct CEvent {
@@ -17,6 +21,7 @@ pub struct CEvent {
     pub fpath1: [libc::c_char; 256],
     pub fpath2: [libc::c_char; 256],
     pub spare: [u8; 8],
+    pub magic_num: [u64; asserts_enabled()],
 }
 
 #[repr(C)]
@@ -73,6 +78,10 @@ impl CEvent {
 
         if self.pid == 0 || self.ktime == 0 || self.event == 0 {
             tracing::error!("Found invalid CEvent!");
+        }
+
+        if self.magic_num[0] != build_params::CANARY as u64 + 1 {
+            tracing::error!("Cevent doesn't have magic number");
         }
     }
 }
