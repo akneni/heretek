@@ -114,6 +114,7 @@ pub struct BpfEventArrayReader {
 
 impl BpfEventArrayReader {
     pub fn from_pinned_path(map_path: &str) -> Result<Self> {
+        check_bpfmap();
         let map_len = const { map_len_bytes() };
 
         let (fd, bpf_map) = unsafe {
@@ -206,6 +207,18 @@ const fn map_len_bytes() -> usize {
 /// parameter block) in terms of slots
 const fn map_len_slots() -> usize {
     (1 << build_params::RING_BUF_SIZE_LOG2) + build_params::NUM_CORES + 1
+}
+
+/// This function must only run at compiletime
+const fn check_bpfmap() {
+    const {
+        if mem::size_of::<CEvent>() != mem::size_of::<CEventSlot>() {
+            panic!("CEvent is not the largest element in the event slot");
+        }
+        if !mem::size_of::<CEvent>().is_multiple_of(8) {
+            panic!("Cevent has a length that is not a multiple of 8");
+        }
+    }
 }
 
 pub mod cbpfmap {

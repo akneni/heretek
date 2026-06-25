@@ -13,6 +13,8 @@
 #define EVENT_METADATA_SLOT (EVENT_BUFFER_SLOTS + 0)
 #define EVENT_PARAM_SLOT (EVENT_BUFFER_SLOTS + 1)
 
+/// This type is used in the event_array_md and parameters structs to detect
+/// memory corruption. This is unused if ASSERTS is turned off
 typedef struct canary_t {
 	__u32 cpu_id;
 	__u32 magic_num;
@@ -61,7 +63,7 @@ static __always_inline parameters *get_params() {
 	return (parameters *)bpf_map_lookup_elem(&events, &md_key);
 }
 
-static __always_inline void check_canary(canary_t *can) {
+static __always_inline void check_canary_asso(canary_t *can) {
 	if (!ASSERTS)
 		return;
 
@@ -94,7 +96,7 @@ static __always_inline event *reserve_event_slot() {
 		return NULL;
 	}
 
-	check_canary(&md->canary);
+	check_canary_asso(&md->canary);
 
 	next_head = (md->head + 1) % map_len;
 	if (unlikely(next_head == md->tail)) {
@@ -127,7 +129,7 @@ static __always_inline void commit_event(event *evt) {
 		return;
 	}
 
-	check_canary(&md->canary);
+	check_canary_asso(&md->canary);
 
 	next_head = (md->head + 1) % map_len;
 	if (ASSERTS) {
