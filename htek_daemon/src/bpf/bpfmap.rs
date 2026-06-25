@@ -80,8 +80,24 @@ impl CEvent {
             tracing::error!("Found invalid CEvent!");
         }
 
-        if self.magic_num[0] != build_params::CANARY as u64 + 1 {
+        if self.check_magic_num().is_err() {
             tracing::error!("Cevent doesn't have magic number");
+        }
+    }
+
+    fn check_magic_num(&self) -> Result<()> {
+        if build_params::ASSERTS {
+            unsafe {
+                let magic_num_ptr = &self.magic_num as *const u64;
+                let magic_num = *magic_num_ptr;
+                if magic_num == build_params::CANARY as u64 + 1 {
+                    Ok(())
+                } else {
+                    bail!("magic number error");
+                }
+            }
+        } else {
+            Ok(())
         }
     }
 }
