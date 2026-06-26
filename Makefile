@@ -1,4 +1,4 @@
-.PHONY: install_deps build install
+.PHONY: install_deps build install test
 
 install_deps:
 	bash ./buildscripts/install_deps.sh
@@ -10,3 +10,6 @@ build:
 
 install:
 	./build/htek install-from-repo
+
+test:
+	python3 ./tests/src/main.py
