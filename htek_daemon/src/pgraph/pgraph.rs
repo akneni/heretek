@@ -164,7 +164,7 @@ impl PGraph {
         };
         creator.child_tuids.insert(actor.id);
 
-        // Make Child actor inheric creator's profiles and child profiles
+        // Make Child actor inherit creator's profiles and child profiles
         for prof in creator.actor.actor_md.profile.iter() {
             actor.actor_md.profile.insert(prof.clone());
         }
@@ -174,7 +174,17 @@ impl PGraph {
 
         // Hnadle unchained chain
         let unchained_chain = creator.unchained_chain && actor.actor_md.profile.is_empty();
-        let cwd = creator.actor.actor_md.cwd.clone();
+        let cwd = match creator.actor.get_cwd(false) {
+            Ok(r) => Some(r),
+            Err(e) => {
+                tracing::error!(
+                    "Error ({}) Creator Actor doesn't have a cwd: {}",
+                    e,
+                    creator.to_str(1)
+                );
+                None
+            }
+        };
 
         // Update pid map
         let entry = self.pid_map.entry(actor.id.pid);
@@ -575,6 +585,74 @@ impl PGraph {
 
         if build_params::PERF_TRACKING {
             tracing::info!("Time Elapsed [killed_tree_dbgo]: {:?}", timer.elapsed());
+        }
+    }
+
+    pub fn check_cwd_asso(&self) {
+        if !build_params::ASSERTS {
+            return;
+        }
+
+        let mut errors = vec![];
+
+        for (_, node) in self.nodes.iter() {
+            let actor = &node.actor;
+            let cwd = match actor.actor_md.cwd.clone() {
+                Some(r) => r,
+                None => {
+                    errors.push(format!("Actor has NONE for cwd: {}", node.to_str(1)));
+                    continue;
+                }
+            };
+
+            if ActorState::Running != actor.actor_md.state {
+                continue;
+            }
+
+            let path_str = format!("/proc/{}/cwd", actor.id.pid);
+            let path = match fs::canonicalize(&path_str) {
+                Ok(r) => r,
+                Err(e) => {
+                    let err_str = format!("{e}");
+                    if err_str.contains("No such file or directory") {
+                        // This may happen when the process exited recently and we haven't
+                        // gotten a change to reap the exit event
+                        continue;
+                    }
+                    errors.push(format!(
+                        "Failed to canonicalize cwd: {}\n{}",
+                        err_str,
+                        node.to_str(1),
+                    ));
+                    continue;
+                }
+            };
+
+            if cwd != path {
+                errors.push(format!(
+                    "mismatched CWD had {} found {}",
+                    cwd.display(),
+                    path.display()
+                ));
+            }
+        }
+
+        if !errors.is_empty() {
+            let payload = errors.join("--------------\n\n\n");
+
+            let mut inc_file = match IncFile::new("ASSERTION FAILED [killed_cwd_check]") {
+                Ok(r) => r,
+                Err(e) => {
+                    tracing::error!("Failed to create incident file: {e}");
+                    utils::clean_shutdown(1);
+                }
+            };
+
+            let _ = inc_file.dmp_stacktrace();
+            let _ = inc_file.dmp_displayable("Errors", &payload);
+            let _ = inc_file.dmp_pgraph(self);
+            drop(inc_file);
+            // utils::clean_shutdown(1);
         }
     }
 }

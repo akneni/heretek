@@ -4,7 +4,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result, anyhow, bail};
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -110,13 +110,12 @@ impl Actor {
             .context("failed to get /proc/<pid>/exe (likely bc this is a kthread)")?;
 
         let cmd_args = Self::get_cmdline(pid).ok();
-        let cwd = Self::get_cwd(pid).ok();
 
         let mut actor = Self::new(pid, start_time);
 
         actor.actor_md.binary.push(exe_path);
         actor.actor_md.argv.push(cmd_args);
-        actor.actor_md.cwd = cwd;
+        actor.get_cwd(true)?;
 
         Ok(actor)
     }
@@ -132,9 +131,16 @@ impl Actor {
             .collect())
     }
 
-    fn get_cwd(pid: i32) -> Result<PathBuf> {
-        let path = format!("/proc/{}/cwd", pid);
-        Ok(fs::canonicalize(&path)?)
+    pub fn get_cwd(&mut self, use_procs: bool) -> Result<PathBuf> {
+        if use_procs || self.actor_md.cwd.is_none() {
+            let path = format!("/proc/{}/cwd", self.id.pid);
+            self.actor_md.cwd = Some(fs::canonicalize(&path)?);
+        }
+        Ok(self
+            .actor_md
+            .cwd
+            .clone()
+            .ok_or(anyhow!("proc directory failed to get cwd"))?)
     }
 
     pub fn resolve_path_str(&self, fpath: &str) -> Result<PathBuf> {

@@ -139,6 +139,7 @@ fn main() {
         pgraph_db.check_unchained_chains_asso();
         pgraph_db.check_cycles_asso();
         pgraph_db.check_killed_children_asso();
+        pgraph_db.check_cwd_asso();
 
         if counter.is_multiple_of(8)
             && let Err(e) = rpc_server.heal_sockets()
