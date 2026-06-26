@@ -119,14 +119,21 @@ int handle_process_exec(struct trace_event_raw_sched_process_exec *ctx) {
 
 SEC("tracepoint/sched/sched_process_exit")
 int handle_process_exit(struct trace_event_raw_sched_process_exit *ctx) {
-	event *evt = reserve_event_slot();
+	__s32 tgid = (__s32)(bpf_get_current_pid_tgid() >> 32);
+	event *evt;
 
+	if (ctx->pid != tgid) {
+		// This means a non-main thread exited
+		return 0;
+	}
+
+	evt = reserve_event_slot();
 	if (unlikely(!evt)) {
 		return 0;
 	}
 
 	evt->event = GENE_EXIT;
-	evt->pid = (__s32)(bpf_get_current_pid_tgid() >> 32);
+	evt->pid = tgid;
 	evt->ktime = bpf_ktime_get_boot_ns();
 	commit_event(evt);
 	return 0;
