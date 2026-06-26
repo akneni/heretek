@@ -22,7 +22,7 @@ pub struct PGraphNode {
     pub actor: Actor,
 
     // If this is set to true, it means that this node as well as all parent nodes have the
-    // "unchaned" profile and no others.
+    // "unchained" profile and no others.
     pub unchained_chain: bool,
 }
 
@@ -129,7 +129,7 @@ impl PGraph {
         self.nodes.get_mut(&tuid)
     }
 
-    /// Returns the Node whose actor has the same PID as the one passed and the lastest start time
+    /// Returns the Node whose actor has the same PID as the one passed and the latest start time
     /// that comes before the start time passed.
     pub fn get_latest_prior_mut(&mut self, pid: i32, ktime: u64) -> Option<&mut PGraphNode> {
         let ktime_vec = self.pid_map.get(&pid)?;
@@ -328,6 +328,7 @@ impl PGraph {
         }
     }
 
+    /// Gets the parent id and start time
     fn read_proc_stat(pid: i32, hz: u64) -> io::Result<(i32, u64)> {
         let stat = fs::read_to_string(format!("/proc/{pid}/stat"))?;
         let after_comm = stat

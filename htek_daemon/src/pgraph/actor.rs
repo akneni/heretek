@@ -272,7 +272,10 @@ impl Actor {
 
     /// Handle execve metadata update
     pub fn handle_execve_mdupdate(&mut self, config: &Config, binary: &Path) -> PolicyVerdict {
-        // TODO: Determine the correct way to get the binary path
+        // TODO: Determine the correct way to get the binary path:
+        // (the correct way is probably to search $PATH if it doesn't start with ./ or /)
+        //  if it does, we look at /proc/<pid>/exe
+        // TODO compare this with /proc/<pid>/exe and $PATH if asserts is true
         let binary_path = match fs::canonicalize(binary) {
             Ok(r) => r,
             _ => {
@@ -283,10 +286,6 @@ impl Actor {
                 }
             }
         };
-
-        // TODO: processes should inherit profiles from parents, and then reset these profiles at the first execve call
-        // All other execve calls should not reset/wipe profiles
-        // Make sure not to wipe out creator's child_profile while resetting.
 
         let args = Self::get_cmdline(self.id.pid).ok();
         let profile = config.profile_config.get_profile(&binary_path);

@@ -96,7 +96,7 @@ fn main() {
     let mut ttracker = perftracker::PerfTracker::new();
     let mut counter: u64 = 0;
 
-    tracing::info!("htekd started successfully. Entering main loop../");
+    tracing::info!("htekd started successfully. Entering main loop...");
     loop {
         counter += 1;
 
