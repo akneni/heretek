@@ -4,3 +4,4 @@ build/*
 script*
 justfile
 **/vmlinux.h
+test_qemu_vms/
