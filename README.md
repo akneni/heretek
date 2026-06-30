@@ -1,5 +1,5 @@
 # Heretek
-- Heretek is a endpoint detection and response (EDR) solution for linux. It's primarily targeted towards desktop linux. 
+- Heretek is an endpoint detection and response (EDR) solution for linux. It's primarily targeted towards desktop linux. 
 
 ## About
 
