@@ -21,13 +21,13 @@ REQ_BINS = [
     "pgrep",
 ]
 
-TARGETS = [
-    "/root/HeretekTargets/read",  # -----
-    "/root/HeretekTargets/write",  # -----
-    "/root/HeretekTargets/execute",  # -----
-    "/root/HeretekTargets/bind",  # ----c
-    "/root/HeretekTargets/connect",  # ---b-
-]
+TARGETS = {
+    "/root/HeretekTargets/read": "r----",
+    "/root/HeretekTargets/write": "-w---",
+    "/root/HeretekTargets/execute": "--x--",
+    "/root/HeretekTargets/bind": "---b-",
+    "/root/HeretekTargets/connect": "----c",
+}
 
 
 def preflight():
@@ -105,14 +105,6 @@ def setup_tst_env():
     Creates all the target files listed in `TARGETS` and sets them to 0o777
     Modifies ACL.json file from the hretek to include the appropriate permissions for `TARGETS`
     """
-    target_modes = {
-        "/root/HeretekTargets/read": "-----",
-        "/root/HeretekTargets/write": "-----",
-        "/root/HeretekTargets/execute": "-----",
-        "/root/HeretekTargets/bind": "----c",
-        "/root/HeretekTargets/connect": "---b-",
-    }
-
     lscpu = shutil.which("lscpu")
     if lscpu is None:
         raise FileNotFoundError("Could not find required executable: lscpu")
@@ -134,7 +126,7 @@ def setup_tst_env():
 
     hardened_profile = acl.setdefault("hardened", {})
     rules = hardened_profile.setdefault("rules", {})
-    rules.update(target_modes)
+    rules.update(TARGETS)
 
     with acl_path.open("w") as acl_file:
         json.dump(acl, acl_file, indent=2)
