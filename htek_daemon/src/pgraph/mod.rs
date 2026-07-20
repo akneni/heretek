@@ -12,7 +12,7 @@ use crate::bpf::{CEvent, event_types};
 use crate::detection::PolicyVerdict;
 use crate::response::handle_response;
 use crate::uinterf::Config;
-use crate::{build_params, utils};
+use crate::utils;
 
 /// This is the bulk of this program.
 /// It updates the Pgraph with the events and detects any violations
@@ -34,9 +34,6 @@ pub fn handle_event(config: &Config, pgraph: &mut PGraph, cevent: &CEvent) -> Re
                     Some(r) => r,
                     None => {
                         tracing::warn!("Unknown Creator Process for ({:?})", (event));
-                        if build_params::ASSERTS {
-                            utils::clean_shutdown(1);
-                        }
                         return Ok(());
                     }
                 };

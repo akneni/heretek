@@ -1,5 +1,5 @@
-#define RING_BUF_SIZE_LOG2 (19)
-#define NUM_CORES (14)
-#define ASSERTS (false)
 #define PERF_TRACKING (false)
+#define RING_BUF_SIZE_LOG2 (19)
+#define NUM_CORES (32)
+#define ASSERTS (false)
 #define CANARY (872350975)

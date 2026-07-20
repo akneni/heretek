@@ -94,6 +94,7 @@ pub fn handle_rpc(
             utils::clean_shutdown(0);
         }
         Rpc::Touched { file } => handle_touched(pgraph_db, file),
+        Rpc::Ping => RpcResult::Pong,
         Rpc::DebugAction => {
             if !(cfg!(debug_assertions) || build_params::ASSERTS) {
                 let res = RpcResult::DebugActionRes(

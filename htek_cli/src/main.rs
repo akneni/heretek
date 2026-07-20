@@ -49,9 +49,14 @@ fn bringup(_config: &ConfigFile) -> Result<()> {
     let mut sleep_ms = 75;
     for _i in 0..4 {
         match RpcClient::new() {
-            Ok(_) => {
-                println!("Spawned daemon successfully");
-                return Ok(());
+            Ok(mut c) => {
+                let res = c.call_rpc_sync(Rpc::Ping);
+                if let Ok(RpcResult::Pong) = res {
+                    println!("Spawned daemon successfully");
+                    return Ok(());
+                } else {
+                    eprintln!("An error occured: {:?}", res);
+                }
             }
             Err(_) => {
                 thread::sleep(Duration::from_millis(sleep_ms));

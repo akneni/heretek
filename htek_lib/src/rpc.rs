@@ -17,6 +17,7 @@ pub enum Rpc {
     Bringdown,
     SetChildProfile { pid: i32, profiles: HashSet<String> },
     Touched { file: PathBuf },
+    Ping,
     DebugAction,
 }
 
@@ -26,6 +27,7 @@ pub enum RpcResult {
     SetProfileRes { msg: String, success: bool },
     SetChildProfileRes,
     TouchedRes(String),
+    Pong,
     DebugActionRes(String),
     Error(String),
 }

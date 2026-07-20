@@ -152,7 +152,7 @@ fn main() {
             rpc::handle_rpc(&config, &mut pgraph_db, rpcobj, is_root)
         });
         if let Err(e) = res {
-            tracing::warn!("{e}");
+            tracing::warn!("Error handling RPC: {e}");
         }
 
         // 5) Sleep for an alloted amount of time.
